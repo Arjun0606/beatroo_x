@@ -6,6 +6,17 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DC50405A2DF0D84E00579ABF /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = DC5040592DF0D84E00579ABF /* FirebaseAuth */; };
+		DC50405C2DF0D84E00579ABF /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = DC50405B2DF0D84E00579ABF /* FirebaseAuthCombine-Community */; };
+		DC50405E2DF0D86B00579ABF /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = DC50405D2DF0D86B00579ABF /* FirebaseFirestore */; };
+		DC5040602DF0D88F00579ABF /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = DC50405F2DF0D88F00579ABF /* FirebaseStorage */; };
+		DC5040622DF0D88F00579ABF /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = DC5040612DF0D88F00579ABF /* FirebaseStorageCombine-Community */; };
+		DC5040642DF0D8AB00579ABF /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = DC5040632DF0D8AB00579ABF /* GoogleSignIn */; };
+		DC50409F2DF2B18400579ABF /* SpotifyiOS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC50409B2DF2AA8E00579ABF /* SpotifyiOS.xcframework */; };
+		DC5040A02DF2B18400579ABF /* SpotifyiOS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = DC50409B2DF2AA8E00579ABF /* SpotifyiOS.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		DC5040082DF0C6A000579ABF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -23,15 +34,43 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		DC5040A12DF2B18400579ABF /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				DC5040A02DF2B18400579ABF /* SpotifyiOS.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		DC503FFA2DF0C69E00579ABF /* Beatroo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Beatroo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC5040072DF0C6A000579ABF /* BeatrooTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BeatrooTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC5040112DF0C6A000579ABF /* BeatrooUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BeatrooUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DC50409B2DF2AA8E00579ABF /* SpotifyiOS.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:2FNC3A47ZF:Spotify"; lastKnownFileType = wrapper.xcframework; path = SpotifyiOS.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DC5040662DF1627A00579ABF /* Exceptions for "Beatroo" folder in "Beatroo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DC503FF92DF0C69E00579ABF /* Beatroo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DC503FFC2DF0C69E00579ABF /* Beatroo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DC5040662DF1627A00579ABF /* Exceptions for "Beatroo" folder in "Beatroo" target */,
+			);
 			path = Beatroo;
 			sourceTree = "<group>";
 		};
@@ -52,6 +91,13 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DC50405A2DF0D84E00579ABF /* FirebaseAuth in Frameworks */,
+				DC50409F2DF2B18400579ABF /* SpotifyiOS.xcframework in Frameworks */,
+				DC5040602DF0D88F00579ABF /* FirebaseStorage in Frameworks */,
+				DC5040622DF0D88F00579ABF /* FirebaseStorageCombine-Community in Frameworks */,
+				DC50405C2DF0D84E00579ABF /* FirebaseAuthCombine-Community in Frameworks */,
+				DC50405E2DF0D86B00579ABF /* FirebaseFirestore in Frameworks */,
+				DC5040642DF0D8AB00579ABF /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,9 +121,11 @@
 		DC503FF12DF0C69E00579ABF = {
 			isa = PBXGroup;
 			children = (
+				DC50409B2DF2AA8E00579ABF /* SpotifyiOS.xcframework */,
 				DC503FFC2DF0C69E00579ABF /* Beatroo */,
 				DC50400A2DF0C6A000579ABF /* BeatrooTests */,
 				DC5040142DF0C6A000579ABF /* BeatrooUITests */,
+				DC5040582DF0D84E00579ABF /* Frameworks */,
 				DC503FFB2DF0C69E00579ABF /* Products */,
 			);
 			sourceTree = "<group>";
@@ -92,6 +140,13 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		DC5040582DF0D84E00579ABF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -102,6 +157,7 @@
 				DC503FF62DF0C69E00579ABF /* Sources */,
 				DC503FF72DF0C69E00579ABF /* Frameworks */,
 				DC503FF82DF0C69E00579ABF /* Resources */,
+				DC5040A12DF2B18400579ABF /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -112,6 +168,12 @@
 			);
 			name = Beatroo;
 			packageProductDependencies = (
+				DC5040592DF0D84E00579ABF /* FirebaseAuth */,
+				DC50405B2DF0D84E00579ABF /* FirebaseAuthCombine-Community */,
+				DC50405D2DF0D86B00579ABF /* FirebaseFirestore */,
+				DC50405F2DF0D88F00579ABF /* FirebaseStorage */,
+				DC5040612DF0D88F00579ABF /* FirebaseStorageCombine-Community */,
+				DC5040632DF0D8AB00579ABF /* GoogleSignIn */,
 			);
 			productName = Beatroo;
 			productReference = DC503FFA2DF0C69E00579ABF /* Beatroo.app */;
@@ -195,6 +257,10 @@
 			);
 			mainGroup = DC503FF12DF0C69E00579ABF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				DC5040252DF0C71400579ABF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DC503FFB2DF0C69E00579ABF /* Products */;
 			projectDirPath = "";
@@ -399,7 +465,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UDGYWMMVJS;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -410,9 +477,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = beatroo.Beatroo;
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_BUNDLE_IDENTIFIER = Bondfyr.Beatroo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Beatroo/Beatroo-Bridging-Header/Beatroo-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -427,7 +496,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UDGYWMMVJS;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -438,9 +508,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = beatroo.Beatroo;
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_BUNDLE_IDENTIFIER = Bondfyr.Beatroo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Beatroo/Beatroo-Bridging-Header/Beatroo-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -558,6 +630,58 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.14.0;
+			};
+		};
+		DC5040252DF0C71400579ABF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DC5040592DF0D84E00579ABF /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		DC50405B2DF0D84E00579ABF /* FirebaseAuthCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAuthCombine-Community";
+		};
+		DC50405D2DF0D86B00579ABF /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		DC50405F2DF0D88F00579ABF /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		DC5040612DF0D88F00579ABF /* FirebaseStorageCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC5040242DF0C70100579ABF /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseStorageCombine-Community";
+		};
+		DC5040632DF0D8AB00579ABF /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC5040252DF0C71400579ABF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DC503FF22DF0C69E00579ABF /* Project object */;
 }
