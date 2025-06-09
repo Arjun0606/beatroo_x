@@ -6,6 +6,7 @@ class MusicServiceCoordinator: ObservableObject {
     @Published var currentTrack: MusicTrackInfo?
     @Published var currentProvider: MusicProvider = .unknown
     @Published var isPlaying = false
+    @Published var playbackState: PlaybackState = .stopped
     
     // Managers for Apple Music and Spotify only
     private let nowPlayingManager = NowPlayingManager()
@@ -20,6 +21,8 @@ class MusicServiceCoordinator: ObservableObject {
     // Track last state to avoid excessive logging
     private var lastProvider: MusicProvider = .unknown
     private var lastTrackTitle: String?
+    private var lastConnectionInterruption = false
+    private var lastAppleMusicUpdate: Date?
     
     init() {
         print("MusicServiceCoordinator: Initializing")
@@ -29,18 +32,55 @@ class MusicServiceCoordinator: ObservableObject {
         // Give NowPlayingManager access to spotify manager for detection
         nowPlayingManager.setSpotifyManager(spotifyManager)
         
-        // Try to reconnect Spotify if possible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.spotifyManager.reconnectIfPossible()
-        }
+        // Don't auto-connect to Spotify on startup - user should control this
         
         // Start periodic updates to handle state changes
         startPeriodicUpdates()
+        
+        // Listen for system music player interruptions
+        setupInterruptionDetection()
     }
     
     private func startPeriodicUpdates() {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.updateCurrentTrack()
+        }
+    }
+    
+    private func setupInterruptionDetection() {
+        // Listen for various Apple Music interruption signals
+        let notificationNames: [NSNotification.Name] = [
+            NSNotification.Name("systemMusicPlayer connection interrupted"),
+            NSNotification.Name.MPMusicPlayerControllerPlaybackStateDidChange,
+            NSNotification.Name.MPMusicPlayerControllerNowPlayingItemDidChange
+        ]
+        
+        for notificationName in notificationNames {
+            NotificationCenter.default.addObserver(
+                forName: notificationName,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                print("MusicServiceCoordinator: 📡 Received notification: \(notificationName)")
+                
+                if notificationName.rawValue.contains("interrupted") {
+                    print("MusicServiceCoordinator: 🚨 System music player connection interrupted - Apple Music likely killed")
+                    self?.lastConnectionInterruption = true
+                    
+                    // Clear track after delay to allow for app restart
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        if self?.lastConnectionInterruption == true && self?.currentProvider == .appleMusicStreaming {
+                            print("MusicServiceCoordinator: Clearing Apple Music track due to sustained interruption")
+                            self?.clearCurrentTrack()
+                        }
+                    }
+                } else {
+                    // For other notifications, check if Apple Music app is actually running
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        self?.checkAppleMusicAppStatus()
+                    }
+                }
+            }
         }
     }
     
@@ -54,32 +94,25 @@ class MusicServiceCoordinator: ObservableObject {
             self?.updateCurrentTrack()
         }
         
-        // Observe Spotify track changes
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("SpotifyTrackChanged"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.updateCurrentTrack()
-        }
-        
         // Observe Spotify connection changes
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("SpotifyConnectionChanged"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            print("MusicServiceCoordinator: Spotify connection changed, forcing track update")
+            print("MusicServiceCoordinator: Spotify connection changed, updating track info")
             
             // Force Spotify to get current track immediately when connection changes
             if let spotifyManager = self?.spotifyManager, spotifyManager.isConnected {
-                print("MusicServiceCoordinator: Forcing Spotify to get current track immediately")
+                print("MusicServiceCoordinator: Spotify connected - getting current track")
                 spotifyManager.getCurrentTrack()
                 
                 // Double-check after a short delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self?.updateCurrentTrack()
                 }
+            } else {
+                print("MusicServiceCoordinator: Spotify disconnected - will only reconnect on manual request")
             }
             
             self?.updateCurrentTrack()
@@ -133,28 +166,8 @@ class MusicServiceCoordinator: ObservableObject {
             
             // If Spotify already has a track, use it immediately
             if let spotifyTrack = spotifyManager.currentTrack {
-                print("MusicServiceCoordinator: 🎵 USING SPOTIFY TRACK: \(spotifyTrack.name) by \(spotifyTrack.artist)")
-                self.currentProvider = .spotify
-                self.currentTrack = MusicTrackInfo(
-                    title: spotifyTrack.name,
-                    artist: spotifyTrack.artist,
-                    album: spotifyTrack.album,
-                    artwork: spotifyTrack.artworkImage,
-                    provider: .spotify
-                )
-                self.isPlaying = true
-                self.lastProvider = .spotify
-                self.lastTrackTitle = spotifyTrack.name
-                return
-            }
-            
-            // Otherwise, request current track and check again after a delay
-            spotifyManager.getCurrentTrack()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                if let spotifyTrack = self.spotifyManager.currentTrack {
-                    if self.lastTrackTitle != spotifyTrack.name {
-                        print("MusicServiceCoordinator: Using Spotify track (after delay): \(spotifyTrack.name)")
-                    }
+                print("MusicServiceCoordinator: 🎵 USING SPOTIFY TRACK: \(spotifyTrack.name) by \(spotifyTrack.artist), playing: \(spotifyManager.isPlaying)")
+                DispatchQueue.main.async {
                     self.currentProvider = .spotify
                     self.currentTrack = MusicTrackInfo(
                         title: spotifyTrack.name,
@@ -163,9 +176,35 @@ class MusicServiceCoordinator: ObservableObject {
                         artwork: spotifyTrack.artworkImage,
                         provider: .spotify
                     )
-                    self.isPlaying = true
+                    self.isPlaying = self.spotifyManager.isPlaying
+                    self.playbackState = self.spotifyManager.isPlaying ? .playing : .paused
                     self.lastProvider = .spotify
                     self.lastTrackTitle = spotifyTrack.name
+                }
+                return
+            }
+            
+            // Otherwise, request current track and check again after a delay
+            spotifyManager.getCurrentTrack()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                if let spotifyTrack = self.spotifyManager.currentTrack {
+                    if self.lastTrackTitle != spotifyTrack.name {
+                        print("MusicServiceCoordinator: Using Spotify track (after delay): \(spotifyTrack.name), playing: \(self.spotifyManager.isPlaying)")
+                    }
+                    DispatchQueue.main.async {
+                        self.currentProvider = .spotify
+                        self.currentTrack = MusicTrackInfo(
+                            title: spotifyTrack.name,
+                            artist: spotifyTrack.artist,
+                            album: spotifyTrack.album,
+                            artwork: spotifyTrack.artworkImage,
+                            provider: .spotify
+                        )
+                        self.isPlaying = self.spotifyManager.isPlaying
+                        self.playbackState = self.spotifyManager.isPlaying ? .playing : .paused
+                        self.lastProvider = .spotify
+                        self.lastTrackTitle = spotifyTrack.name
+                    }
                 } else {
                     // If Spotify is connected but no track, check Apple Music as fallback
                     if self.isAppleMusicActuallyPlaying() {
@@ -198,46 +237,55 @@ class MusicServiceCoordinator: ObservableObject {
     }
     
     private func isAppleMusicActuallyPlaying() -> Bool {
-        // EXTREMELY strict detection - Apple Music must be ACTIVELY playing RIGHT NOW
+        // Simplified Apple Music detection
         let musicPlayer = MPMusicPlayerController.systemMusicPlayer
         
-        // Method 1: Check system music player state
-        let isSystemPlayerPlaying = musicPlayer.playbackState == .playing && musicPlayer.nowPlayingItem != nil
+        // Check if we have a track and it's playing or paused (but available)
+        let hasSystemTrack = musicPlayer.nowPlayingItem != nil
+        let isSystemActive = musicPlayer.playbackState == .playing || musicPlayer.playbackState == .paused
         
-        // Method 2: Check MPNowPlayingInfoCenter with VERY strict criteria
-        var isNowPlayingActive = false
-        var nowPlayingDetails = "none"
-        
+        // Check MPNowPlayingInfoCenter
+        var hasNowPlayingInfo = false
         if let nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo {
-            // Check playback rate - this is the most critical indicator
-            let playbackRate = nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] as? Double ?? 0.0
-            
-            // Get track details for debugging
-            let title = nowPlayingInfo[MPMediaItemPropertyTitle] as? String ?? "unknown"
-            let artist = nowPlayingInfo[MPMediaItemPropertyArtist] as? String ?? "unknown"
-            nowPlayingDetails = "\(title) by \(artist) (rate: \(playbackRate))"
-            
-            // Check if there's valid track info
-            let hasTrackInfo = nowPlayingInfo[MPMediaItemPropertyTitle] != nil ||
-                              nowPlayingInfo[MPMediaItemPropertyArtist] != nil
-            
-            // Much stricter check - must have playback rate exactly 1.0 (actively playing)
-            isNowPlayingActive = hasTrackInfo && playbackRate == 1.0
+            hasNowPlayingInfo = nowPlayingInfo[MPMediaItemPropertyTitle] != nil ||
+                               nowPlayingInfo[MPMediaItemPropertyArtist] != nil
         }
         
-        // Method 3: Check our NowPlayingManager
-        let hasNowPlayingTrack = nowPlayingManager.currentTrack != nil && 
-                                nowPlayingManager.playbackState == .playing
+        // Check our NowPlayingManager
+        let hasNowPlayingTrack = nowPlayingManager.currentTrack != nil
         
-        // SUPER CONSERVATIVE: ALL conditions must be true for Apple Music to be considered playing
-        let isPlaying = isSystemPlayerPlaying && isNowPlayingActive && hasNowPlayingTrack
+        // Apple Music is active if ANY of these conditions are true AND we haven't had a recent interruption
+        let hasAppleMusicActivity = (hasSystemTrack && isSystemActive) || hasNowPlayingInfo || hasNowPlayingTrack
+        let shouldShowAppleMusic = hasAppleMusicActivity && !lastConnectionInterruption
         
-        // Always log the detailed status for debugging
-        print("MusicServiceCoordinator: Apple Music check - System: \(isSystemPlayerPlaying), NowPlaying: \(isNowPlayingActive), Manager: \(hasNowPlayingTrack)")
-        print("MusicServiceCoordinator: NowPlaying details: \(nowPlayingDetails)")
-        print("MusicServiceCoordinator: Apple Music final decision: \(isPlaying ? "PLAYING" : "NOT PLAYING")")
+        if shouldShowAppleMusic {
+            lastAppleMusicUpdate = Date()
+            lastConnectionInterruption = false
+        }
         
-        return isPlaying
+        return shouldShowAppleMusic
+    }
+    
+    private func checkAppleMusicAppStatus() {
+        // Simplified Apple Music app status check
+        let musicPlayer = MPMusicPlayerController.systemMusicPlayer
+        
+        print("MusicServiceCoordinator: 🔍 Checking Apple Music app status...")
+        print("MusicServiceCoordinator: - Playback state: \(musicPlayer.playbackState.rawValue)")
+        print("MusicServiceCoordinator: - Has now playing item: \(musicPlayer.nowPlayingItem != nil)")
+        
+        // If we have a connection interruption and we're showing Apple Music, clear it
+        if lastConnectionInterruption && currentProvider == .appleMusicStreaming {
+            print("MusicServiceCoordinator: ❌ Connection was interrupted - clearing track")
+            clearCurrentTrack()
+            return
+        }
+        
+        // If Apple Music is stopped and we're showing it, clear the track
+        if musicPlayer.playbackState == .stopped && currentProvider == .appleMusicStreaming {
+            print("MusicServiceCoordinator: ❌ Apple Music stopped - clearing track")
+            clearCurrentTrack()
+        }
     }
     
     private func useAppleMusicTrack() {
@@ -245,17 +293,34 @@ class MusicServiceCoordinator: ObservableObject {
             if lastTrackTitle != nowPlayingTrack.title {
                 print("MusicServiceCoordinator: Using Apple Music track: \(nowPlayingTrack.title)")
             }
-            self.currentProvider = .appleMusicStreaming
-            self.currentTrack = MusicTrackInfo(
-                title: nowPlayingTrack.title,
-                artist: nowPlayingTrack.artist,
-                album: nowPlayingTrack.album,
-                artwork: nowPlayingTrack.artwork,
-                provider: .appleMusicStreaming
-            )
-            self.isPlaying = nowPlayingManager.playbackState == .playing
-            self.lastProvider = .appleMusicStreaming
-            self.lastTrackTitle = nowPlayingTrack.title
+            
+            // Update last activity timestamp
+            lastAppleMusicUpdate = Date()
+            lastConnectionInterruption = false // Reset interruption flag when we get valid data
+            
+            // Get current playback state from multiple sources for reliability
+            let managerIsPlaying = nowPlayingManager.playbackState == .playing
+            let systemIsPlaying = MPMusicPlayerController.systemMusicPlayer.playbackState == .playing
+            
+            // Use the most reliable indicator
+            let actuallyPlaying = systemIsPlaying || managerIsPlaying
+            
+            print("MusicServiceCoordinator: Apple Music playback state - Manager: \(managerIsPlaying), System: \(systemIsPlaying), Final: \(actuallyPlaying)")
+            
+            DispatchQueue.main.async {
+                self.currentProvider = .appleMusicStreaming
+                self.currentTrack = MusicTrackInfo(
+                    title: nowPlayingTrack.title,
+                    artist: nowPlayingTrack.artist,
+                    album: nowPlayingTrack.album,
+                    artwork: nowPlayingTrack.artwork,
+                    provider: .appleMusicStreaming
+                )
+                self.isPlaying = actuallyPlaying
+                self.playbackState = actuallyPlaying ? .playing : .paused
+                self.lastProvider = .appleMusicStreaming
+                self.lastTrackTitle = nowPlayingTrack.title
+            }
         } else {
             clearCurrentTrack()
         }
@@ -265,11 +330,14 @@ class MusicServiceCoordinator: ObservableObject {
         if lastProvider != .unknown {
             print("MusicServiceCoordinator: Clearing current track")
         }
-        self.currentTrack = nil
-        self.currentProvider = .unknown
-        self.isPlaying = false
-        self.lastProvider = .unknown
-        self.lastTrackTitle = nil
+        DispatchQueue.main.async {
+            self.currentTrack = nil
+            self.currentProvider = .unknown
+            self.isPlaying = false
+            self.playbackState = .stopped
+            self.lastProvider = .unknown
+            self.lastTrackTitle = nil
+        }
     }
     
     // Handle callback URL for Spotify authorization
@@ -287,7 +355,7 @@ class MusicServiceCoordinator: ObservableObject {
     
     // Connect to Spotify
     func connectToSpotify() {
-        spotifyManager.connect()
+        spotifyManager.connectWithPersistence()
     }
     
     // Open the appropriate music app
@@ -333,6 +401,70 @@ class MusicServiceCoordinator: ObservableObject {
     func forceSpotifyReauthorization() {
         print("MusicServiceCoordinator: 🔑 FORCING SPOTIFY REAUTHORIZATION")
         spotifyManager.forceReauthorization()
+    }
+    
+    // MARK: - Playback Controls
+    func togglePlayback() {
+        print("MusicServiceCoordinator: Toggle playback requested")
+        
+        // Store current track info to prevent clearing on state change
+        let currentTrackBackup = currentTrack
+        let currentProviderBackup = currentProvider
+        
+        // Simple, direct approach to avoid threading issues
+        if spotifyManager.isConnected && currentProvider == .spotify {
+            print("MusicServiceCoordinator: Using Spotify controls")
+            spotifyManager.togglePlayback()
+        } else {
+            print("MusicServiceCoordinator: Using system controls")
+            nowPlayingManager.togglePlayback()
+            
+            // For Apple Music, immediately update the play state to prevent UI flickering
+            DispatchQueue.main.async {
+                if currentTrackBackup != nil && currentProviderBackup == .appleMusicStreaming {
+                    self.isPlaying = !self.isPlaying
+                    self.playbackState = self.isPlaying ? .playing : .paused
+                }
+            }
+        }
+        
+        // Update state after a short delay, but preserve track info
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            // Only refresh if we still have the same track to prevent clearing
+            if self.currentTrack?.title == currentTrackBackup?.title {
+                self.updateCurrentTrack()
+            }
+        }
+    }
+    
+    func skipToNextTrack() {
+        print("MusicServiceCoordinator: Skip to next track requested")
+        
+        if spotifyManager.isConnected && currentProvider == .spotify {
+            spotifyManager.skipToNextTrack()
+        } else {
+            nowPlayingManager.skipToNextTrack()
+        }
+        
+        // Update current track after skip
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.updateCurrentTrack()
+        }
+    }
+    
+    func skipToPreviousTrack() {
+        print("MusicServiceCoordinator: Skip to previous track requested")
+        
+        if spotifyManager.isConnected && currentProvider == .spotify {
+            spotifyManager.skipToPreviousTrack()
+        } else {
+            nowPlayingManager.skipToPreviousTrack()
+        }
+        
+        // Update current track after skip
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.updateCurrentTrack()
+        }
     }
     
     deinit {

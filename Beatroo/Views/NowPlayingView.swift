@@ -91,7 +91,8 @@ struct NowPlayingView: View {
                             // Playback controls
                             HStack(spacing: 40) {
                                 Button(action: { 
-                                    // TODO: Implement skip previous for music services
+                                    print("NowPlayingView: Previous button pressed")
+                                    musicCoordinator.skipToPreviousTrack()
                                 }) {
                                     Image(systemName: "backward.fill")
                                         .font(.system(size: 30))
@@ -99,15 +100,18 @@ struct NowPlayingView: View {
                                 }
                                 
                                 Button(action: { 
-                                    // TODO: Implement play/pause toggle for music services
+                                    print("NowPlayingView: Play/pause button pressed")
+                                    musicCoordinator.togglePlayback()
                                 }) {
-                                    Image(systemName: "play.fill") // TODO: Get actual playback state
+                                    Image(systemName: musicCoordinator.isPlaying ? "pause.fill" : "play.fill")
                                         .font(.system(size: 50))
                                         .foregroundColor(.white)
+                                        .animation(.easeInOut(duration: 0.1), value: musicCoordinator.isPlaying)
                                 }
                                 
                                 Button(action: { 
-                                    // TODO: Implement skip next for music services
+                                    print("NowPlayingView: Next button pressed")
+                                    musicCoordinator.skipToNextTrack()
                                 }) {
                                     Image(systemName: "forward.fill")
                                         .font(.system(size: 30))

@@ -9,6 +9,7 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
     @Published var isConnected = false
     @Published var currentTrack: SpotifyTrack?
     @Published var connectionStatus = "Disconnected"
+    @Published var isPlaying = false
     
     // Spotify SDK components
     private var configuration: SPTConfiguration!
@@ -20,8 +21,8 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
         setupSpotifyConfiguration()
         _ = checkSpotifyInstalled()
         
-        // Try to restore saved connection
-        restoreConnection()
+        // Don't auto-connect on startup - only connect when user explicitly requests it
+        print("SpotifyManager: Ready for manual connection - auto-connection disabled")
     }
     
     private func setupSpotifyConfiguration() {
@@ -182,15 +183,12 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
             
             print("SpotifyManager: ✅ Player state received - isPaused: \(playerState.isPaused), track: \(playerState.track.name)")
             
-            if playerState.isPaused {
-                print("SpotifyManager: ⏸️ Spotify is paused, clearing track")
-                DispatchQueue.main.async {
-                    self?.currentTrack = nil
-                }
-                return
+            // Update playing state and track regardless of pause state
+            DispatchQueue.main.async {
+                self?.isPlaying = !playerState.isPaused
             }
             
-            print("SpotifyManager: 🎵 Track found - updating: \(playerState.track.name) by \(playerState.track.artist.name)")
+            print("SpotifyManager: 🎵 Track found - updating: \(playerState.track.name) by \(playerState.track.artist.name), playing: \(!playerState.isPaused)")
             self?.updateCurrentTrack(from: playerState)
         }
     }
@@ -327,10 +325,83 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
         }
     }
     
+    // MARK: - Playback Controls
+    
+    func togglePlayback() {
+        guard appRemote.isConnected else {
+            print("SpotifyManager: Cannot toggle playback - not connected")
+            return
+        }
+        
+        print("SpotifyManager: Toggling playback - current state: \(isPlaying ? "playing" : "paused")")
+        
+        if isPlaying {
+            appRemote.playerAPI?.pause { [weak self] result, error in
+                if let error = error {
+                    print("SpotifyManager: Error pausing: \(error)")
+                } else {
+                    print("SpotifyManager: Successfully paused")
+                    DispatchQueue.main.async {
+                        self?.isPlaying = false
+                    }
+                }
+            }
+        } else {
+            appRemote.playerAPI?.resume { [weak self] result, error in
+                if let error = error {
+                    print("SpotifyManager: Error resuming: \(error)")
+                } else {
+                    print("SpotifyManager: Successfully resumed")
+                    DispatchQueue.main.async {
+                        self?.isPlaying = true
+                    }
+                }
+            }
+        }
+    }
+    
+    func skipToNextTrack() {
+        guard appRemote.isConnected else {
+            print("SpotifyManager: Cannot skip - not connected")
+            return
+        }
+        
+        print("SpotifyManager: Skipping to next track")
+        appRemote.playerAPI?.skip(toNext: { result, error in
+            if let error = error {
+                print("SpotifyManager: Error skipping to next: \(error)")
+            } else {
+                print("SpotifyManager: Successfully skipped to next")
+            }
+        })
+    }
+    
+    func skipToPreviousTrack() {
+        guard appRemote.isConnected else {
+            print("SpotifyManager: Cannot skip back - not connected")
+            return
+        }
+        
+        print("SpotifyManager: Skipping to previous track")
+        appRemote.playerAPI?.skip(toPrevious: { result, error in
+            if let error = error {
+                print("SpotifyManager: Error skipping to previous: \(error)")
+            } else {
+                print("SpotifyManager: Successfully skipped to previous")
+            }
+        })
+    }
+    
     // MARK: - SPTAppRemotePlayerStateDelegate
     
     func playerStateDidChange(_ playerState: SPTAppRemotePlayerState) {
-        print("SpotifyManager: 🎵 Player state changed - track: \(playerState.track.name)")
+        print("SpotifyManager: 🎵 Player state changed - track: \(playerState.track.name), playing: \(!playerState.isPaused)")
+        
+        // Update playing state immediately
+        DispatchQueue.main.async {
+            self.isPlaying = !playerState.isPaused
+        }
+        
         updateCurrentTrack(from: playerState)
     }
     
@@ -440,10 +511,106 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
             appRemote.connectionParameters.accessToken = savedToken
             
             launchSpotifyIfNeeded {
-                self.attemptConnection(retryCount: 3)
+                self.attemptConnectionWithFallback(retryCount: 5) // Increased retry and use fallback
             }
         } else {
             print("SpotifyManager: No saved token for reconnection")
+        }
+    }
+    
+    // Simplified connection method - just authorize when user wants to connect
+    func connectWithPersistence() {
+        print("SpotifyManager: 🔄 User requested Spotify connection")
+        
+        // If already connected, just get the current track
+        guard !appRemote.isConnected else {
+            print("SpotifyManager: Already connected, just refreshing track")
+            getCurrentTrack()
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.connectionStatus = "Connecting to Spotify..."
+        }
+        
+        // First try to connect with existing token if available
+        if let savedToken = getSavedAccessToken() {
+            print("SpotifyManager: Trying connection with saved token")
+            appRemote.connectionParameters.accessToken = savedToken
+            
+            // Launch Spotify first
+            launchSpotifyIfNeeded {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if !self.appRemote.isConnected {
+                        self.appRemote.connect()
+                    }
+                    
+                    // If connection fails after 2 seconds, try authorization
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        if !self.appRemote.isConnected {
+                            print("SpotifyManager: Token connection failed, starting authorization")
+                            self.startFreshAuthorization()
+                        }
+                    }
+                }
+            }
+        } else {
+            print("SpotifyManager: No saved token, starting custom authorization")
+            startFreshAuthorization()
+        }
+    }
+    
+    private func startFreshAuthorization() {
+        DispatchQueue.main.async {
+            self.connectionStatus = "Authorizing with Spotify..."
+        }
+        
+        // Use a custom authorization approach instead of the potentially broken SDK method
+        self.startCustomAuthorization()
+    }
+    
+    private func startCustomAuthorization() {
+        // Go back to using the SDK's built-in authorization - it's more reliable
+        print("SpotifyManager: Using SDK authorization method")
+        
+        // Set up the configuration properly first
+        let configuration = SPTConfiguration(clientID: "9b3615b5699e4b8d8da6222ebef7a99c", redirectURL: URL(string: "beatroo://spotify-callback")!)
+        configuration.tokenSwapURL = nil
+        configuration.tokenRefreshURL = nil
+        
+        // Use the SDK's authorize method with proper scope
+        appRemote.authorizeAndPlayURI("")
+    }
+    
+    private func tryAuthorizationUrls(urls: [String], index: Int) {
+        guard index < urls.count else {
+            print("SpotifyManager: All authorization methods failed, falling back to SDK method")
+            DispatchQueue.main.async {
+                self.connectionStatus = "Authorization failed - please ensure Spotify is installed"
+            }
+            // Last resort: try the original SDK method
+            self.appRemote.authorizeAndPlayURI("")
+            return
+        }
+        
+        let urlString = urls[index]
+        print("SpotifyManager: Trying authorization method \(index + 1): \(urlString)")
+        
+        guard let url = URL(string: urlString) else {
+            print("SpotifyManager: Invalid URL, trying next method")
+            tryAuthorizationUrls(urls: urls, index: index + 1)
+            return
+        }
+        
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url, options: [:]) { success in
+                if success {
+                    print("SpotifyManager: ✅ Authorization URL opened successfully with method \(index + 1)")
+                } else {
+                    print("SpotifyManager: ❌ Failed to open authorization URL with method \(index + 1), trying next...")
+                    self.tryAuthorizationUrls(urls: urls, index: index + 1)
+                }
+            }
         }
     }
     
@@ -481,6 +648,8 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
         // But we can check if we can establish a connection
         return appRemote.isConnected
     }
+    
+
 }
 
 // Enhanced model for Spotify track with full metadata
