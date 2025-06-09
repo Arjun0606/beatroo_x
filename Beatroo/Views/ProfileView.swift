@@ -4,7 +4,10 @@ struct ProfileView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var musicCoordinator: MusicServiceCoordinator
     @State private var showSignOutAlert = false
+    @State private var showDeleteAlert = false
+    @State private var showEditProfile = false
     @State private var isConnectingSpotify = false
+    @State private var isDeletingAccount = false
     
     private let beatrooPink = Color(hex: "B01E68") // Consistent Beatroo pink color
     
@@ -82,7 +85,7 @@ struct ProfileView: View {
                                     iconColor: beatrooPink
                                 )
                                 
-                                if let age = user.age {
+                                if let age = user.currentAge {
                                     ProfileInfoCard(
                                         icon: "calendar",
                                         title: "Age",
@@ -192,12 +195,93 @@ struct ProfileView: View {
                                 .padding(.horizontal, 20)
                             }
                             .padding(.top, 30)
+                            
+                            // Account Management Section
+                            VStack(alignment: .leading, spacing: 15) {
+                                Text("Account Management")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                
+                                VStack(spacing: 15) {
+                                    // Edit Profile Button
+                                    Button(action: { showEditProfile = true }) {
+                                        HStack(spacing: 15) {
+                                            Image(systemName: "pencil.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(beatrooPink)
+                                                .frame(width: 30)
+                                            
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("Edit Profile")
+                                                    .font(.system(size: 16, weight: .medium))
+                                                    .foregroundColor(.white)
+                                                
+                                                Text("Update your username and profile picture")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.gray)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            Image(systemName: "chevron.right")
+                                                .foregroundColor(.gray)
+                                                .font(.system(size: 14))
+                                        }
+                                        .padding()
+                                        .background(Color.gray.opacity(0.1))
+                                        .cornerRadius(12)
+                                    }
+                                    
+                                    // Delete Account Button
+                                    Button(action: { showDeleteAlert = true }) {
+                                        HStack(spacing: 15) {
+                                            Image(systemName: "trash.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(.red)
+                                                .frame(width: 30)
+                                            
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("Delete Account")
+                                                    .font(.system(size: 16, weight: .medium))
+                                                    .foregroundColor(.red)
+                                                
+                                                Text("Permanently delete your account and data")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.gray)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            if isDeletingAccount {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .red))
+                                                    .scaleEffect(0.8)
+                                            } else {
+                                                Image(systemName: "chevron.right")
+                                                    .foregroundColor(.gray)
+                                                    .font(.system(size: 14))
+                                            }
+                                        }
+                                        .padding()
+                                        .background(Color.gray.opacity(0.1))
+                                        .cornerRadius(12)
+                                    }
+                                    .disabled(isDeletingAccount)
+                                }
+                                .padding(.horizontal, 20)
+                            }
+                            .padding(.top, 30)
                         }
                         
                         Spacer(minLength: 100)
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showEditProfile) {
+            ProfileEditView()
+                .environmentObject(authManager)
         }
         .alert("Sign Out", isPresented: $showSignOutAlert) {
             Button("Cancel", role: .cancel) { }
@@ -206,6 +290,14 @@ struct ProfileView: View {
             }
         } message: {
             Text("Are you sure you want to sign out?")
+        }
+        .alert("Delete Account", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteAccount()
+            }
+        } message: {
+            Text("This action cannot be undone. All your data will be permanently deleted.")
         }
     }
     
@@ -225,6 +317,25 @@ struct ProfileView: View {
         // Check connection status after a delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             self.isConnectingSpotify = false
+        }
+    }
+    
+    private func deleteAccount() {
+        guard !isDeletingAccount else { return }
+        
+        isDeletingAccount = true
+        
+        Task {
+            do {
+                try await authManager.deleteAccount()
+                // No need to update UI here as the user will be signed out automatically
+            } catch {
+                await MainActor.run {
+                    isDeletingAccount = false
+                    // You could show an error alert here if needed
+                    print("Error deleting account: \(error)")
+                }
+            }
         }
     }
 }

@@ -246,7 +246,8 @@ struct ProfileCreationView: View {
                 // Update user data
                 user.displayName = displayName
                 user.username = username
-                user.age = age
+                user.dateOfBirth = dateOfBirth
+                user.age = age // Keep for backward compatibility
                 user.gender = selectedGender
                 if selectedGender == .custom {
                     user.customGender = customGender

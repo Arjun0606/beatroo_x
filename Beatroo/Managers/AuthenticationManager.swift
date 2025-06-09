@@ -170,7 +170,7 @@ class AuthenticationManager: ObservableObject {
         }
     }
     
-    // MARK: - Sign Out
+    // MARK: - Account Management
     func signOut() {
         do {
             try auth.signOut()
@@ -179,5 +179,61 @@ class AuthenticationManager: ObservableObject {
         } catch {
             print("Error signing out: \(error)")
         }
+    }
+    
+    func deleteAccount() async throws {
+        guard let user = auth.currentUser,
+              let uid = currentUser?.uid else {
+            throw NSError(domain: "BeatrooError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user found"])
+        }
+        
+        // Delete user's profile photo from Storage if it exists
+        if let photoURL = currentUser?.photoURL,
+           photoURL.contains("profile_photos") {
+            do {
+                let storageRef = Storage.storage().reference(forURL: photoURL)
+                try await storageRef.delete()
+                print("Profile photo deleted from storage")
+            } catch {
+                print("Error deleting profile photo: \(error)")
+                // Continue with account deletion even if photo deletion fails
+            }
+        }
+        
+        // Try to delete user document from Firestore (may fail due to security rules)
+        do {
+            try await db.collection("users").document(uid).delete()
+            print("User document deleted from Firestore")
+        } catch {
+            print("Error deleting Firestore document (may be due to security rules): \(error)")
+            // Continue with account deletion even if Firestore deletion fails
+            // The document can be cleaned up later via server-side functions
+        }
+        
+        // Delete the Firebase Auth account (this is the most important part)
+        try await user.delete()
+        print("Firebase Auth account deleted")
+        
+        // Update local state - this will trigger the auth state listener
+        // and automatically redirect to sign out state
+        currentUser = nil
+        authState = .signedOut
+        
+        // Clear any local preferences
+        UserDefaults.standard.removeObject(forKey: "PermissionsSetupCompleted")
+        UserDefaults.standard.synchronize()
+        
+        print("Account deletion completed - user will be redirected to sign up")
+    }
+    
+    func updateUserProfile(_ updatedUser: User) async throws {
+        var userToSave = updatedUser
+        userToSave.updatedAt = Date()
+        
+        try await db.collection("users").document(updatedUser.uid).setData(
+            try Firestore.Encoder().encode(userToSave)
+        )
+        
+        self.currentUser = userToSave
     }
 } 

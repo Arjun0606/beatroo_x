@@ -7,7 +7,8 @@ struct User: Codable {
     var displayName: String
     var username: String
     var photoURL: String?
-    var age: Int?
+    var age: Int? // Deprecated - kept for backward compatibility
+    var dateOfBirth: Date?
     var gender: Gender
     var customGender: String?
     var createdAt: Date
@@ -15,10 +16,22 @@ struct User: Codable {
     
     // Google Sign-In info
     var googleId: String?
+    
+    // Computed property to calculate current age from date of birth
+    var currentAge: Int? {
+        guard let dateOfBirth = dateOfBirth else {
+            // Fallback to stored age for backward compatibility
+            return age
+        }
+        let calendar = Calendar.current
+        let ageComponents = calendar.dateComponents([.year], from: dateOfBirth, to: Date())
+        return ageComponents.year
+    }
+    
     var isProfileComplete: Bool {
         return !username.isEmpty && 
                !displayName.isEmpty && 
-               age != nil && 
+               (currentAge != nil || age != nil) && 
                photoURL != nil
     }
 }
@@ -44,6 +57,7 @@ extension User {
             username: "",
             photoURL: nil,
             age: nil,
+            dateOfBirth: nil,
             gender: .preferNotToSay,
             customGender: nil,
             createdAt: Date(),
