@@ -79,5 +79,9 @@
             </array>
         </dict>
     </array>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Beatroo uses your location to discover nearby music listeners and connect you with others in your area.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Beatroo uses your location to discover nearby music listeners and connect you with others in your area.</string>
 </dict>
 </plist> 

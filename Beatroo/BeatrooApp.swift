@@ -6,6 +6,8 @@ import GoogleSignIn
 struct BeatrooApp: App {
     @StateObject private var authManager = AuthenticationManager()
     @StateObject private var musicCoordinator = MusicServiceCoordinator()
+    @StateObject private var locationManager = LocationManager()
+    @StateObject private var socialMusicManager = SocialMusicManager()
     
     init() {
         FirebaseApp.configure()
@@ -16,6 +18,8 @@ struct BeatrooApp: App {
             ContentView()
                 .environmentObject(authManager)
                 .environmentObject(musicCoordinator)
+                .environmentObject(locationManager)
+                .environmentObject(socialMusicManager)
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
                     if url.absoluteString.contains("google") {

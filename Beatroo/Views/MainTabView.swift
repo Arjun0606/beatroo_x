@@ -2,9 +2,17 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject var authManager: AuthenticationManager
+    @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var socialMusicManager: SocialMusicManager
+    @EnvironmentObject var musicCoordinator: MusicServiceCoordinator
     @State private var selectedTab = 0
     
-    private let beatrooPink = Color("B01E68") // Consistent Beatroo pink color
+    private let beatrooPink = Color(hex: "B01E68") // Consistent Beatroo pink color
+    
+    private var notificationTabIcon: String {
+        let unreadCount = socialMusicManager.notifications.filter { !$0.isRead }.count
+        return unreadCount > 0 ? "bell.badge" : "bell"
+    }
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -14,14 +22,31 @@ struct MainTabView: View {
                 }
                 .tag(0)
             
+            LeaderboardView()
+                .tabItem {
+                    Label("Leaderboard", systemImage: "trophy")
+                }
+                .tag(1)
+            
+            NotificationsView()
+                .tabItem {
+                    Label("Notifications", systemImage: notificationTabIcon)
+                }
+                .tag(2)
+            
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.circle")
                 }
-                .tag(1)
+                .tag(3)
         }
         .accentColor(beatrooPink)
         .onAppear {
+            // Initialize social music components
+            if let userId = authManager.currentUser?.uid {
+                socialMusicManager.initialize(userId: userId, musicCoordinator: musicCoordinator, locationManager: locationManager)
+            }
+            
             // Make tab bar more visible with a custom appearance
             let appearance = UITabBarAppearance()
             

@@ -1,0 +1,12 @@
+<!-- Add these entries to your Info.plist file for location permissions -->
+<!-- These allow the app to discover nearby users within 35 meters -->
+
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>Beatroo uses your location to discover nearby music listeners and connect you with others in your area.</string>
+
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>Beatroo uses your location to discover nearby music listeners and connect you with others in your area.</string>
+
+<!-- Optional: More specific description -->
+<key>NSLocationUsageDescription</key>
+<string>Beatroo needs location access to show you nearby users and their music. Only your city is shared, not your exact location.</string> 
