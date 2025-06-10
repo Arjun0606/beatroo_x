@@ -1,6 +1,7 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
+import Combine
 
 @MainActor
 class SocialMusicManager: ObservableObject {
@@ -32,7 +33,26 @@ class SocialMusicManager: ObservableObject {
         // We'll access the current user through Firebase Auth directly
         
         setupListeners()
+        setupLocationObserver()
     }
+    
+    private func setupLocationObserver() {
+        // Observe city changes to reload leaderboard
+        guard let locationManager = locationManager else { return }
+        
+        locationManager.$currentCity
+            .removeDuplicates()
+            .compactMap { $0 }
+            .sink { [weak self] newCity in
+                print("City changed to: \(newCity), reloading leaderboard")
+                Task { @MainActor in
+                    await self?.loadLeaderboard()
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private var cancellables = Set<AnyCancellable>()
     
     deinit {
         nearbyUsersListener?.remove()

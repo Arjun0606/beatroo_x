@@ -17,6 +17,10 @@ class LocationManager: NSObject, ObservableObject {
     override init() {
         super.init()
         setupLocationManager()
+        
+        // Set initial authorization status
+        authorizationStatus = locationManager.authorizationStatus
+        print("LocationManager: Initialized with authorization status: \(authorizationStatus)")
     }
     
     private func setupLocationManager() {
@@ -26,24 +30,37 @@ class LocationManager: NSObject, ObservableObject {
     }
     
     func requestLocationPermission() {
+        print("LocationManager: Current authorization status: \(authorizationStatus)")
+        
         switch authorizationStatus {
         case .notDetermined:
+            print("LocationManager: Requesting location permission...")
             locationManager.requestWhenInUseAuthorization()
         case .denied, .restricted:
+            print("LocationManager: Location access denied/restricted")
             locationError = "Location access is required for discovering nearby music. Please enable it in Settings."
         case .authorizedWhenInUse, .authorizedAlways:
+            print("LocationManager: Already authorized, starting location updates")
             startLocationUpdates()
         @unknown default:
+            print("LocationManager: Unknown status, requesting permission...")
             locationManager.requestWhenInUseAuthorization()
         }
     }
     
     private func startLocationUpdates() {
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            print("LocationManager: Cannot start location updates - not authorized")
             return
         }
         
+        print("LocationManager: Starting location updates...")
         locationManager.startUpdatingLocation()
+        
+        // Also try to get location immediately
+        if CLLocationManager.locationServicesEnabled() {
+            locationManager.requestLocation()
+        }
     }
     
     func stopLocationUpdates() {
@@ -51,16 +68,36 @@ class LocationManager: NSObject, ObservableObject {
     }
     
     private func reverseGeocode(_ location: CLLocation) {
+        print("LocationManager: Starting reverse geocoding for location: \(location.coordinate)")
+        
         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
-            guard let self = self, let placemark = placemarks?.first else {
-                print("Geocoding error: \(error?.localizedDescription ?? "Unknown error")")
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("LocationManager: Geocoding error: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self.locationError = "Failed to determine city: \(error.localizedDescription)"
+                }
+                return
+            }
+            
+            guard let placemark = placemarks?.first else {
+                print("LocationManager: No placemarks found")
+                DispatchQueue.main.async {
+                    self.locationError = "Could not determine city from location"
+                }
                 return
             }
             
             DispatchQueue.main.async {
-                self.currentCity = placemark.locality
-                self.currentCountry = placemark.country
-                print("Location updated: \(self.currentCity ?? "Unknown"), \(self.currentCountry ?? "Unknown")")
+                let city = placemark.locality ?? placemark.subAdministrativeArea ?? "Unknown City"
+                let country = placemark.country ?? "Unknown Country"
+                
+                self.currentCity = city
+                self.currentCountry = country
+                self.locationError = nil
+                
+                print("LocationManager: Location updated successfully: \(city), \(country)")
             }
         }
     }
@@ -129,7 +166,12 @@ class LocationManager: NSObject, ObservableObject {
 
 extension LocationManager: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let newLocation = locations.last else { return }
+        guard let newLocation = locations.last else { 
+            print("LocationManager: No location in update")
+            return 
+        }
+        
+        print("LocationManager: Received location update: \(newLocation.coordinate)")
         
         DispatchQueue.main.async {
             self.location = newLocation
@@ -147,18 +189,26 @@ extension LocationManager: CLLocationManagerDelegate {
     }
     
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        print("LocationManager: Authorization status changed to: \(status)")
+        
         DispatchQueue.main.async {
             self.authorizationStatus = status
         }
         
         switch status {
         case .authorizedWhenInUse, .authorizedAlways:
+            print("LocationManager: Location authorized, starting updates")
             startLocationUpdates()
         case .denied, .restricted:
-            locationError = "Location access denied. Please enable it in Settings to discover nearby music."
+            print("LocationManager: Location access denied/restricted")
+            DispatchQueue.main.async {
+                self.locationError = "Location access denied. Please enable it in Settings to discover nearby music."
+            }
         case .notDetermined:
+            print("LocationManager: Location permission not determined yet")
             break
         @unknown default:
+            print("LocationManager: Unknown authorization status")
             break
         }
     }

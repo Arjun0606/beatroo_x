@@ -12,31 +12,30 @@ struct LeaderboardView: View {
             Color.black.ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Header
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Leaderboard")
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundColor(.white)
+                // Header with City Lock
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Leaderboard")
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundColor(.white)
+                        }
                         
-                        if let city = locationManager.currentCity {
-                            Text("Today in \(city)")
-                                .font(.system(size: 16))
-                                .foregroundColor(.gray)
+                        Spacer()
+                        
+                        Button(action: {
+                            Task {
+                                await socialMusicManager.loadLeaderboard()
+                            }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 20))
+                                .foregroundColor(beatrooPink)
                         }
                     }
                     
-                    Spacer()
-                    
-                    Button(action: {
-                        Task {
-                            await socialMusicManager.loadLeaderboard()
-                        }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 20))
-                            .foregroundColor(beatrooPink)
-                    }
+                    // City Lock Banner
+                    CityLockBanner()
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -77,6 +76,112 @@ struct LeaderboardView: View {
         } message: {
             Text("Leaderboard resets every day at midnight. Keep sharing great music to climb the ranks!")
         }
+    }
+}
+
+struct CityLockBanner: View {
+    @EnvironmentObject var locationManager: LocationManager
+    @State private var refreshTrigger = false
+    private let beatrooPink = Color(hex: "B01E68")
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Location Icon
+            Image(systemName: "location.fill")
+                .font(.system(size: 16))
+                .foregroundColor(beatrooPink)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                if let city = locationManager.currentCity {
+                    HStack(spacing: 4) {
+                        let locationText = if let country = locationManager.currentCountry {
+                            "📍 \(city), \(country)"
+                        } else {
+                            "📍 \(city)"
+                        }
+                        
+                        Text(locationText)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(beatrooPink.opacity(0.7))
+                    }
+                    
+                    Text("Geo-locked to your current location")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                } else {
+                    HStack(spacing: 4) {
+                        Text("📍 Locating...")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.gray)
+                        
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.7)
+                    }
+                    
+                    Text("Getting your location for city leaderboard")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+            }
+            
+            Spacer()
+            
+            // City Stats Badge
+            if let city = locationManager.currentCity {
+                VStack(spacing: 2) {
+                    Text("TODAY")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(beatrooPink)
+                    
+                    Text(getCurrentDateString())
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(beatrooPink.opacity(0.2))
+                .cornerRadius(8)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(beatrooPink.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .onAppear {
+            // Auto-request location permission when banner appears
+            if locationManager.authorizationStatus == .notDetermined {
+                locationManager.requestLocationPermission()
+            }
+            
+            // **FORCE REFRESH**: Trigger a manual refresh to ensure UI updates
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                refreshTrigger.toggle()
+            }
+        }
+        .onChange(of: locationManager.currentCity) { newCity in
+            // **REACTIVE UPDATE**: Force view refresh when location changes
+            print("CityLockBanner: City updated to: \(newCity ?? "nil")")
+            refreshTrigger.toggle()
+        }
+        .onChange(of: refreshTrigger) { _ in
+            // This forces the view to re-render
+        }
+    }
+    
+    private func getCurrentDateString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM dd"
+        return formatter.string(from: Date())
     }
 }
 

@@ -112,89 +112,7 @@ struct ProfileView: View {
                             .padding(.top, 20)
                             
                             // Music Services Section
-                            VStack(alignment: .leading, spacing: 15) {
-                                Text("Music Services")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 20)
-                                
-                                VStack(spacing: 15) {
-                                    // Spotify Connection
-                                    HStack(spacing: 15) {
-                                        Image(systemName: "music.note.list")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(.green)
-                                            .frame(width: 30)
-                                        
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Spotify")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.white)
-                                            
-                                            Text(musicCoordinator.spotifyManager.isConnected ? "Connected" : "Not connected")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(musicCoordinator.spotifyManager.isConnected ? .green : .gray)
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        if !musicCoordinator.spotifyManager.isConnected {
-                                            Button(action: connectSpotify) {
-                                                if isConnectingSpotify {
-                                                    ProgressView()
-                                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                        .scaleEffect(0.8)
-                                                } else {
-                                                    Text("Connect")
-                                                        .font(.system(size: 14, weight: .semibold))
-                                                        .foregroundColor(.white)
-                                                        .padding(.horizontal, 16)
-                                                        .padding(.vertical, 8)
-                                                        .background(Color.green)
-                                                        .cornerRadius(20)
-                                                }
-                                            }
-                                            .disabled(isConnectingSpotify)
-                                        } else {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                                .font(.system(size: 20))
-                                        }
-                                    }
-                                    .padding()
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(12)
-                                    
-                                    // Apple Music (always available)
-                                    HStack(spacing: 15) {
-                                        Image(systemName: "music.note")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(beatrooPink)
-                                            .frame(width: 30)
-                                        
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Apple Music")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.white)
-                                            
-                                            Text("Always available")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.gray)
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                            .font(.system(size: 20))
-                                    }
-                                    .padding()
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(12)
-                                }
-                                .padding(.horizontal, 20)
-                            }
-                            .padding(.top, 30)
+                            musicServicesSection
                             
                             // Account Management Section
                             VStack(alignment: .leading, spacing: 15) {
@@ -308,15 +226,52 @@ struct ProfileView: View {
         return formatter.string(from: date)
     }
     
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "Connected":
+            return .green
+        case "Spotify app not running", "Reconnecting...", "Ready to reconnect":
+            return .orange
+        case "Spotify app not installed":
+            return .red
+        case "Ready to connect":
+            return .gray
+        default:
+            return .yellow
+        }
+    }
+    
     private func connectSpotify() {
         guard !isConnectingSpotify else { return }
         
         isConnectingSpotify = true
+        
+        // Use the standard connection method for now
         musicCoordinator.connectToSpotify()
         
-        // Check connection status after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.isConnectingSpotify = false
+        // Monitor connection status with longer timeout
+        var checkCount = 0
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
+            checkCount += 1
+            
+            // Check if connected
+            if musicCoordinator.spotifyManager.isConnected {
+                isConnectingSpotify = false
+                timer.invalidate()
+            }
+            // Check if authorization started (user redirected to Spotify)
+            else if musicCoordinator.spotifyManager.connectionStatus.contains("Authorizing") {
+                // Keep spinner active but stop after reasonable time
+                if checkCount > 20 { // 10 seconds
+                    isConnectingSpotify = false
+                    timer.invalidate()
+                }
+            }
+            // Stop after 15 seconds regardless
+            else if checkCount > 30 {
+                isConnectingSpotify = false
+                timer.invalidate()
+            }
         }
     }
     
@@ -336,6 +291,125 @@ struct ProfileView: View {
                     print("Error deleting account: \(error)")
                 }
             }
+        }
+    }
+    
+    private var musicServicesSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("Music Services")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+            
+            VStack(spacing: 15) {
+                // Spotify Connection
+                spotifyServiceRow
+                
+                // Apple Music (always available)
+                appleMusicServiceRow
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.top, 30)
+    }
+    
+    private var spotifyServiceRow: some View {
+        HStack(spacing: 15) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 20))
+                .foregroundColor(.green)
+                .frame(width: 30)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Spotify")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white)
+                
+                // Show detailed status using the enhanced status system
+                Text(musicCoordinator.spotifyManager.connectionStatus)
+                    .font(.system(size: 14))
+                    .foregroundColor(statusColor(for: musicCoordinator.spotifyManager.connectionStatus))
+            }
+            
+            Spacer()
+            
+            spotifyActionButton
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private var appleMusicServiceRow: some View {
+        HStack(spacing: 15) {
+            Image(systemName: "music.note")
+                .font(.system(size: 20))
+                .foregroundColor(beatrooPink)
+                .frame(width: 30)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Apple Music")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white)
+                
+                Text("Always available")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+                .font(.system(size: 20))
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var spotifyActionButton: some View {
+        if musicCoordinator.spotifyManager.isConnected {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+                .font(.system(size: 20))
+        } else if musicCoordinator.spotifyManager.hasSpotifyCredentials {
+            // Has credentials - show reconnect button
+            Button(action: connectSpotify) {
+                if isConnectingSpotify {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Reconnect")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.orange)
+                        .cornerRadius(20)
+                }
+            }
+            .disabled(isConnectingSpotify)
+        } else {
+            // No credentials - show connect button
+            Button(action: connectSpotify) {
+                if isConnectingSpotify {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Connect")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.green)
+                        .cornerRadius(20)
+                }
+            }
+            .disabled(isConnectingSpotify)
         }
     }
 }

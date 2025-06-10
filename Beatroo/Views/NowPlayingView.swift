@@ -91,38 +91,6 @@ struct NowPlayingView: View {
                             }
                             .padding(.top, 20)
                             
-                            // Playback controls
-                            HStack(spacing: 40) {
-                                Button(action: { 
-                                    print("NowPlayingView: Previous button pressed")
-                                    musicCoordinator.skipToPreviousTrack()
-                                }) {
-                                    Image(systemName: "backward.fill")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.white)
-                                }
-                                
-                                Button(action: { 
-                                    print("NowPlayingView: Play/pause button pressed")
-                                    musicCoordinator.togglePlayback()
-                                }) {
-                                    Image(systemName: musicCoordinator.isPlaying ? "pause.fill" : "play.fill")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(.white)
-                                        .animation(.easeInOut(duration: 0.1), value: musicCoordinator.isPlaying)
-                                }
-                                
-                                Button(action: { 
-                                    print("NowPlayingView: Next button pressed")
-                                    musicCoordinator.skipToNextTrack()
-                                }) {
-                                    Image(systemName: "forward.fill")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                            .padding(.vertical, 30)
-                            
                             // Platform indicator
                             HStack(spacing: 8) {
                                 Image(systemName: "music.note")

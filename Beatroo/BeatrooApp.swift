@@ -30,6 +30,24 @@ struct BeatrooApp: App {
                         musicCoordinator.handleCallback(url: url)
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                    // Maintain Spotify connection when app comes to foreground
+                    print("BeatrooApp: App entering foreground - maintaining Spotify connection")
+                    // If we have Spotify credentials but aren't connected, start persistent reconnection
+                    let spotifyManager = musicCoordinator.spotifyManager
+                    if spotifyManager.hasSpotifyCredentials && !spotifyManager.isConnected {
+                        print("BeatrooApp: Starting persistent reconnection for Spotify")
+                        // Use a small delay to let the app settle
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            spotifyManager.maintainConnection()
+                        }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    // App became active - refresh music state
+                    print("BeatrooApp: App became active - refreshing music state")
+                    musicCoordinator.refreshNowPlaying()
+                }
         }
     }
 }
