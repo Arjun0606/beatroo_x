@@ -2,6 +2,8 @@ import Foundation
 import FirebaseFirestore
 import FirebaseAuth
 import Combine
+import UIKit
+import MediaPlayer
 
 @MainActor
 class SocialMusicManager: ObservableObject {
@@ -256,6 +258,9 @@ class SocialMusicManager: ObservableObject {
                 track: track
             )
             
+            // Award points: 1 point to receiver, 0.25 points to giver
+            await awardLikePoints(receiverId: user.id, giverId: currentUser.uid, city: city)
+            
             print("Liked \(track.title) by \(user.displayName)")
             
         } catch {
@@ -274,6 +279,67 @@ class SocialMusicManager: ObservableObject {
             return
         }
         
+        // Show provider selection prompt before playing
+        await showProviderSelectionPrompt(for: track, user: user, currentUser: currentUser, city: city)
+    }
+    
+    // Enhanced play track with provider selection
+    @MainActor
+    func showProviderSelectionPrompt(for track: NearbyUser.CurrentTrack, user: NearbyUser, currentUser: FirebaseAuth.User, city: String) async {
+        guard let musicCoordinator = musicCoordinator else { return }
+        
+        // Get available providers
+        let availableProviders = musicCoordinator.availableServices
+        
+        if availableProviders.count == 1 {
+            // Only one provider available, use it directly
+            await playTrackOnProvider(track, user: user, currentUser: currentUser, city: city, provider: availableProviders[0])
+        } else {
+            // Multiple providers available, show selection
+            let alertController = UIAlertController(
+                title: "Choose Music Provider",
+                message: "Which app would you like to play \"\(track.title)\" on?",
+                preferredStyle: .actionSheet
+            )
+            
+            // Add actions for each available provider
+            for provider in availableProviders {
+                let action = UIAlertAction(title: provider.displayName, style: .default) { _ in
+                    Task {
+                        await self.playTrackOnProvider(track, user: user, currentUser: currentUser, city: city, provider: provider)
+                    }
+                }
+                
+                // Add provider icon if available
+                if let image = provider.iconImage {
+                    action.setValue(image, forKey: "image")
+                }
+                
+                alertController.addAction(action)
+            }
+            
+            // Add cancel action
+            alertController.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            
+            // Present the alert
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+                
+                // For iPad support
+                if let popover = alertController.popoverPresentationController {
+                    popover.sourceView = rootViewController.view
+                    popover.sourceRect = CGRect(x: rootViewController.view.bounds.midX, y: rootViewController.view.bounds.midY, width: 0, height: 0)
+                    popover.permittedArrowDirections = []
+                }
+                
+                rootViewController.present(alertController, animated: true)
+            }
+        }
+    }
+    
+    // Actually play the track on the specified provider
+    private func playTrackOnProvider(_ track: NearbyUser.CurrentTrack, user: NearbyUser, currentUser: FirebaseAuth.User, city: String, provider: MusicProvider) async {
         let playId = UUID().uuidString
         let play = MusicPlay(
             id: playId,
@@ -288,7 +354,7 @@ class SocialMusicManager: ObservableObject {
         )
         
         do {
-            // Save play
+            // Save play record first
             try await db.collection("music_plays").document(playId).setData(
                 try Firestore.Encoder().encode(play)
             )
@@ -301,13 +367,136 @@ class SocialMusicManager: ObservableObject {
                 track: track
             )
             
-            // Here you would integrate with Spotify/Apple Music to actually play the track
-            // For now, we'll just track the play
-            print("Playing \(track.title) by \(user.displayName)")
+            // Award points: 2 points to receiver, 0.5 points to giver
+            await awardPlayPoints(receiverId: user.id, giverId: currentUser.uid, city: city)
+            
+            // **NEW**: Actually play the track on the chosen provider
+            await actuallyPlayTrack(track, on: provider)
+            
+            print("✅ Playing \(track.title) by \(user.displayName) on \(provider.displayName)")
             
         } catch {
-            print("Error playing track: \(error)")
-            errorMessage = "Failed to play track"
+            print("❌ Error playing track: \(error)")
+            errorMessage = "Failed to play track on \(provider.displayName)"
+        }
+    }
+    
+    // Core method that handles the actual music playback
+    @MainActor
+    private func actuallyPlayTrack(_ track: NearbyUser.CurrentTrack, on provider: MusicProvider) async {
+        guard let musicCoordinator = musicCoordinator else {
+            print("❌ MusicServiceCoordinator not available")
+            return
+        }
+        
+        switch provider {
+        case .spotify:
+            await playTrackOnSpotify(track)
+            
+        case .appleMusicStreaming:
+            await playTrackOnAppleMusic(track)
+            
+        default:
+            print("❌ Provider \(provider.displayName) not supported for playback")
+            // Open the provider's app as fallback
+            musicCoordinator.openMusicApp(provider: provider)
+        }
+    }
+    
+    // Spotify-specific playback implementation
+    private func playTrackOnSpotify(_ track: NearbyUser.CurrentTrack) async {
+        guard let musicCoordinator = musicCoordinator else { return }
+        
+        let spotifyManager = musicCoordinator.spotifyManager
+        
+        // Ensure Spotify is connected
+        if !spotifyManager.isConnected {
+            print("🔗 Spotify not connected, attempting to connect...")
+            spotifyManager.connect()
+            
+            // Wait for connection (with timeout)
+            for _ in 0..<10 { // 5 second timeout
+                if spotifyManager.isConnected {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            }
+            
+            if !spotifyManager.isConnected {
+                print("❌ Failed to connect to Spotify")
+                await showPlaybackError("Unable to connect to Spotify. Please check your connection.")
+                return
+            }
+        }
+        
+        // Search for the track and play it
+        await spotifyManager.searchAndPlayTrack(title: track.title, artist: track.artist)
+    }
+    
+    // Apple Music-specific playback implementation  
+    private func playTrackOnAppleMusic(_ track: NearbyUser.CurrentTrack) async {
+        // For Apple Music, we'll use the MPMusicPlayerController
+        // This requires the track to be in the user's library or Apple Music catalog
+        
+        let musicPlayer = MPMusicPlayerController.systemMusicPlayer
+        
+        // Search for the track in Apple Music
+        let query = MPMediaQuery.songs()
+        let titlePredicate = MPMediaPropertyPredicate(value: track.title, forProperty: MPMediaItemPropertyTitle)
+        let artistPredicate = MPMediaPropertyPredicate(value: track.artist, forProperty: MPMediaItemPropertyArtist)
+        
+        query.addFilterPredicate(titlePredicate)
+        query.addFilterPredicate(artistPredicate)
+        
+        if let items = query.items, !items.isEmpty {
+            // Found the track in the user's library
+            print("🎵 Found \(track.title) in Apple Music library")
+            
+            let collection = MPMediaItemCollection(items: items)
+            musicPlayer.setQueue(with: collection)
+            musicPlayer.play()
+            
+            print("✅ Playing \(track.title) on Apple Music")
+        } else {
+            // Track not in library, open Apple Music app with search
+            print("🔍 Track not in library, opening Apple Music for search")
+            
+            let searchQuery = "\(track.title) \(track.artist)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            if let searchURL = URL(string: "music://search?term=\(searchQuery)") {
+                await UIApplication.shared.open(searchURL)
+            } else {
+                // Fallback to regular Apple Music app
+                if let musicURL = URL(string: "music://") {
+                    await UIApplication.shared.open(musicURL)
+                }
+            }
+            
+            await showPlaybackInfo("Opened Apple Music to search for \"\(track.title)\"")
+        }
+    }
+    
+    // Helper methods for user feedback
+    @MainActor
+    private func showPlaybackError(_ message: String) async {
+        let alert = UIAlertController(title: "Playback Error", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let rootViewController = window.rootViewController {
+            rootViewController.present(alert, animated: true)
+        }
+    }
+    
+    @MainActor
+    private func showPlaybackInfo(_ message: String) async {
+        let alert = UIAlertController(title: "Music Player", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let rootViewController = window.rootViewController {
+            rootViewController.present(alert, animated: true)
         }
     }
     
@@ -465,4 +654,78 @@ class SocialMusicManager: ObservableObject {
         
         isLoading = false
     }
-} 
+    
+    // MARK: - Points System
+    
+    private func awardLikePoints(receiverId: String, giverId: String, city: String) async {
+        await withTaskGroup(of: Void.self) { group in
+            // Award 1 point to the person whose song was liked
+            group.addTask {
+                await self.awardPoints(userId: receiverId, points: 1.0, reason: "Song liked", city: city)
+            }
+            
+            // Award 0.25 points to the person who liked the song
+            group.addTask {
+                await self.awardPoints(userId: giverId, points: 0.25, reason: "Liked someone's song", city: city)
+            }
+        }
+    }
+    
+    private func awardPlayPoints(receiverId: String, giverId: String, city: String) async {
+        await withTaskGroup(of: Void.self) { group in
+            // Award 2 points to the person whose song was played
+            group.addTask {
+                await self.awardPoints(userId: receiverId, points: 2.0, reason: "Song played", city: city)
+            }
+            
+            // Award 0.5 points to the person who played the song
+            group.addTask {
+                await self.awardPoints(userId: giverId, points: 0.5, reason: "Played someone's song", city: city)
+            }
+        }
+    }
+    
+    private func awardPoints(userId: String, points: Double, reason: String, city: String) async {
+        let pointsData: [String: Any] = [
+            "userId": userId,
+            "points": points,
+            "reason": reason,
+            "city": city,
+            "timestamp": FieldValue.serverTimestamp()
+        ]
+        
+        do {
+            // Add to points history
+            try await db.collection("user_points").addDocument(data: pointsData)
+            
+            // Update user's total score using a transaction
+            try await db.runTransaction { (transaction, errorPointer) -> Any? in
+                let userStatsRef = self.db.collection("user_stats").document(userId)
+                
+                do {
+                    let userStatsDoc = try transaction.getDocument(userStatsRef)
+                    
+                    let currentScore = userStatsDoc.data()?["totalScore"] as? Double ?? 0.0
+                    let newScore = currentScore + points
+                    
+                    let statsData: [String: Any] = [
+                        "totalScore": newScore,
+                        "lastUpdated": FieldValue.serverTimestamp(),
+                        "city": city
+                    ]
+                    
+                    transaction.setData(statsData, forDocument: userStatsRef, merge: true)
+                    return nil
+                } catch {
+                    print("❌ Transaction error: \(error)")
+                    return nil
+                }
+            }
+            
+            print("✅ Awarded \(points) points to user \(userId) for: \(reason)")
+            
+        } catch {
+            print("❌ Error awarding points: \(error)")
+        }
+    }
+}

@@ -10,6 +10,7 @@ class NowPlayingManager: ObservableObject {
     private var playbackObserver: NSObjectProtocol?
     private var routeChangeObserver: NSObjectProtocol?
     private var stateChangeObserver: NSObjectProtocol?
+    private var updateTimer: Timer?
     
     // Reference to Spotify manager for proper detection
     private var spotifyManager: SpotifyManager?
@@ -32,6 +33,7 @@ class NowPlayingManager: ObservableObject {
         setupNotifications()
         checkAuthorizationAndUpdateNowPlaying()
         setupAudioSession()
+        startPeriodicUpdates()
     }
     
     private func setupAudioSession() {
@@ -242,8 +244,16 @@ class NowPlayingManager: ObservableObject {
         self.spotifyManager = manager
     }
     
+    private func startPeriodicUpdates() {
+        // Check for Apple Music updates every 2 seconds
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.updateNowPlaying()
+        }
+    }
+    
     deinit {
         print("NowPlayingManager: Deinitializing")
+        updateTimer?.invalidate()
         [playbackObserver, routeChangeObserver, stateChangeObserver].forEach { observer in
             if let observer = observer {
                 NotificationCenter.default.removeObserver(observer)

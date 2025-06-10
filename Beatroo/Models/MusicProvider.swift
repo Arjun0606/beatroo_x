@@ -34,6 +34,54 @@ enum MusicProvider: String, CaseIterable {
         }
     }
     
+    /// Display name for UI elements
+    var displayName: String {
+        switch self {
+        case .appleMusicStreaming:
+            return "Apple Music"
+        case .spotify:
+            return "Spotify"
+        case .primeMusic:
+            return "Prime Music"
+        case .youtubeMusic:
+            return "YouTube Music"
+        case .soundCloud:
+            return "SoundCloud"
+        case .pandora:
+            return "Pandora"
+        case .tidal:
+            return "Tidal"
+        case .deezer:
+            return "Deezer"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+    
+    /// Icon image for provider selection alerts
+    var iconImage: UIImage? {
+        switch self {
+        case .appleMusicStreaming:
+            return UIImage(systemName: "music.note")
+        case .spotify:
+            return UIImage(systemName: "music.mic")
+        case .primeMusic:
+            return UIImage(systemName: "music.note.list")
+        case .youtubeMusic:
+            return UIImage(systemName: "play.rectangle")
+        case .soundCloud:
+            return UIImage(systemName: "waveform")
+        case .pandora:
+            return UIImage(systemName: "radio")
+        case .tidal:
+            return UIImage(systemName: "music.quarternote.3")
+        case .deezer:
+            return UIImage(systemName: "music.note.tv")
+        case .unknown:
+            return UIImage(systemName: "questionmark.circle")
+        }
+    }
+    
     static func fromString(_ provider: String) -> MusicProvider {
         let lowercased = provider.lowercased()
         

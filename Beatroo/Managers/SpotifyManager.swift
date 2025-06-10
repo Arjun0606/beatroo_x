@@ -983,6 +983,77 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
         reconnectionTimer = nil
         reconnectionAttempts = 0
     }
+    
+    // MARK: - Enhanced Play Functions for Social Music Discovery
+    
+    /// Search for a track and play it (used by social music discovery)
+    func searchAndPlayTrack(title: String, artist: String) async {
+        guard appRemote.isConnected else {
+            print("SpotifyManager: ❌ Cannot search and play - not connected to Spotify")
+            return
+        }
+        
+        print("SpotifyManager: 🔍 Searching for track: \(title) by \(artist)")
+        
+        // For now, we'll use a simple approach to search and play
+        // In a full implementation, you'd use Spotify Web API to search
+        // and then play the track using the App Remote
+        
+        // Create a search query
+        let searchQuery = "\(title) \(artist)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        
+        // Try to play using Spotify URI format
+        let spotifySearchURI = "spotify:search:\(searchQuery)"
+        
+        // Attempt to play the search result
+        appRemote.playerAPI?.play(spotifySearchURI) { [weak self] _, error in
+            if let error = error {
+                print("SpotifyManager: ❌ Error playing search result: \(error)")
+                // Fallback: Open Spotify app with search
+                DispatchQueue.main.async {
+                    self?.openSpotifyWithSearch(query: searchQuery)
+                }
+            } else {
+                print("SpotifyManager: ✅ Successfully initiated playback for \(title)")
+            }
+        }
+    }
+    
+    /// Open Spotify app with a search query as fallback
+    @MainActor
+    private func openSpotifyWithSearch(query: String) {
+        let spotifySearchURL = "spotify:search:\(query)"
+        
+        if let url = URL(string: spotifySearchURL) {
+            UIApplication.shared.open(url) { success in
+                if success {
+                    print("SpotifyManager: 📱 Opened Spotify app with search query")
+                } else {
+                    print("SpotifyManager: ❌ Failed to open Spotify app")
+                }
+            }
+        }
+    }
+    
+    /// Play a specific Spotify URI (if you have the track URI)
+    func playSpotifyURI(_ uri: String) {
+        guard appRemote.isConnected else {
+            print("SpotifyManager: ❌ Cannot play URI - not connected")
+            return
+        }
+        
+        print("SpotifyManager: ▶️ Playing Spotify URI: \(uri)")
+        
+        appRemote.playerAPI?.play(uri) { [weak self] _, error in
+            if let error = error {
+                print("SpotifyManager: ❌ Error playing URI: \(error)")
+            } else {
+                print("SpotifyManager: ✅ Successfully playing URI")
+                // Get the updated player state
+                self?.getCurrentTrack()
+            }
+        }
+    }
 }
 
 // Enhanced model for Spotify track with full metadata

@@ -189,45 +189,93 @@ struct InfoBannerView: View {
     private let beatrooPink = Color(hex: "B01E68")
     
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 16) {
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.red)
-                            .font(.system(size: 12))
-                        Text("1 pt")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
+        VStack(spacing: 12) {
+            // Title
+            Text("💎 Scoring System")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+            
+            // Getting points (receiving)
+            VStack(spacing: 6) {
+                Text("When Others Interact With Your Vibes:")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.gray)
+                
+                HStack(spacing: 20) {
+                    VStack(spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "heart.fill")
+                                .foregroundColor(.red)
+                                .font(.system(size: 12))
+                            Text("1 pt")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        Text("per like")
+                            .font(.system(size: 10))
+                            .foregroundColor(.gray)
                     }
-                    Text("per vibe")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
-                }
-                
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "play.fill")
-                            .foregroundColor(.green)
-                            .font(.system(size: 12))
-                        Text("2 pts")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
+                    
+                    VStack(spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 12))
+                            Text("2 pts")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        Text("per play")
+                            .font(.system(size: 10))
+                            .foregroundColor(.gray)
                     }
-                    Text("per play")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
                 }
+            }
+            
+            // Giving points (engaging)
+            VStack(spacing: 6) {
+                Text("When You Discover Others' Music:")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.gray)
                 
-                Spacer()
-                
-                VStack(spacing: 4) {
-                    Text("🕛")
-                        .font(.system(size: 16))
-                    Text("Resets daily")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
+                HStack(spacing: 20) {
+                    VStack(spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "heart.fill")
+                                .foregroundColor(.pink)
+                                .font(.system(size: 10))
+                            Text("+0.25")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.pink)
+                        }
+                        Text("for liking")
+                            .font(.system(size: 9))
+                            .foregroundColor(.gray)
+                    }
+                    
+                    VStack(spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.fill")
+                                .foregroundColor(.cyan)
+                                .font(.system(size: 10))
+                            Text("+0.5")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.cyan)
+                        }
+                        Text("for playing")
+                            .font(.system(size: 9))
+                            .foregroundColor(.gray)
+                    }
                 }
+            }
+            
+            // Daily reset
+            HStack(spacing: 8) {
+                Text("🕛")
+                    .font(.system(size: 14))
+                Text("Resets daily")
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
             }
         }
         .padding()

@@ -277,22 +277,30 @@ class MusicServiceCoordinator: ObservableObject {
                     self.lastProvider = .spotify
                 }
             }
-            // If Apple Music has a track but is paused, keep showing it
+            // If Apple Music has a track but is paused, only show it if it's recently paused (not stale cache)
             else if appleMusicTrack != nil && !appleMusicPlaying {
-                print("MusicServiceCoordinator: 🎵 DISPLAYING PAUSED APPLE MUSIC: \(appleMusicTrack!.title) by \(appleMusicTrack!.artist)")
-                DispatchQueue.main.async {
-                    self.currentTrack = MusicTrackInfo(
-                        title: appleMusicTrack!.title,
-                        artist: appleMusicTrack!.artist,
-                        album: appleMusicTrack!.album,
-                        artwork: appleMusicTrack!.artwork,
-                        provider: .appleMusicStreaming,
-                        isPlaying: false
-                    )
-                    self.isPlaying = false
-                    self.currentProvider = .appleMusicStreaming
-                    self.playbackState = .paused
-                    self.lastProvider = .appleMusicStreaming
+                let timeSinceLastUpdate = abs(lastAppleMusicUpdateTime.timeIntervalSinceNow)
+                let isRecentlyPaused = timeSinceLastUpdate < 30.0 // Only show paused tracks from last 30 seconds
+                
+                if isRecentlyPaused {
+                    print("MusicServiceCoordinator: 🎵 DISPLAYING PAUSED APPLE MUSIC: \(appleMusicTrack!.title) by \(appleMusicTrack!.artist)")
+                    DispatchQueue.main.async {
+                        self.currentTrack = MusicTrackInfo(
+                            title: appleMusicTrack!.title,
+                            artist: appleMusicTrack!.artist,
+                            album: appleMusicTrack!.album,
+                            artwork: appleMusicTrack!.artwork,
+                            provider: .appleMusicStreaming,
+                            isPlaying: false
+                        )
+                        self.isPlaying = false
+                        self.currentProvider = .appleMusicStreaming
+                        self.playbackState = .paused
+                        self.lastProvider = .appleMusicStreaming
+                    }
+                } else {
+                    print("MusicServiceCoordinator: 🚫 Apple Music track is stale cache (\(timeSinceLastUpdate)s old) - ignoring")
+                    clearCurrentTrack()
                 }
             }
             // Only clear if we truly have no track from either service
