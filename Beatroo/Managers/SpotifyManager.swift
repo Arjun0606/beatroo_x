@@ -331,13 +331,14 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
         
         DispatchQueue.main.async {
             self.isConnected = false
-            if clearCredentials {
-            self.currentTrack = nil
-                self.isPlaying = false
-            self.connectionStatus = "Disconnected"
+            // DON'T clear connectionStatus, currentTrack, or isPlaying - keep them as-is
+            // This makes it behave like Apple Music where disconnection doesn't mean "logged out"
+            if self.hasSpotifyCredentials {
+                self.connectionStatus = "Ready (reconnecting...)"
             } else {
-                // Like Apple Music - keep showing current track and ready state
-                self.connectionStatus = "Ready (will reconnect)"
+                self.connectionStatus = "Disconnected"
+                self.currentTrack = nil
+                self.isPlaying = false
             }
         }
         
@@ -409,7 +410,7 @@ class SpotifyManager: NSObject, ObservableObject, SPTAppRemoteDelegate, SPTAppRe
                 self.connectionStatus = "Ready (reconnecting...)"
             } else {
                 self.connectionStatus = "Disconnected"
-            self.currentTrack = nil
+                self.currentTrack = nil
                 self.isPlaying = false
             }
         }

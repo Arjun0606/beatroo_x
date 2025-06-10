@@ -9,7 +9,7 @@ import MediaPlayer
 class SocialMusicManager: ObservableObject {
     @Published var nearbyUsers: [NearbyUser] = []
     @Published var notifications: [MusicNotification] = []
-    @Published var leaderboard: [MusicActivity] = []
+    @Published var leaderboard: [LeaderboardEntry] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
@@ -565,91 +565,35 @@ class SocialMusicManager: ObservableObject {
         isLoading = true
         
         do {
-            // Get today's start time (midnight)
-            let calendar = Calendar.current
-            let startOfDay = calendar.startOfDay(for: Date())
+            // Get today's date string
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let todayString = dateFormatter.string(from: Date())
             
-            // Fetch likes from today
-            let likesSnapshot = try await db.collection("music_likes")
-                .whereField("city", isEqualTo: city)
-                .whereField("timestamp", isGreaterThan: startOfDay)
-                .getDocuments()
+            // Load daily leaderboard from Firestore
+            let leaderboardDoc = try await db.collection("leaderboards")
+                .document(city)
+                .collection("daily")
+                .document(todayString)
+                .getDocument()
             
-            // Fetch plays from today
-            let playsSnapshot = try await db.collection("music_plays")
-                .whereField("city", isEqualTo: city)
-                .whereField("timestamp", isGreaterThan: startOfDay)
-                .getDocuments()
-            
-            // Process and aggregate scores
-            var scoreMap: [String: MusicActivity] = [:]
-            
-            // Process likes
-            for doc in likesSnapshot.documents {
-                if let like = try? doc.data(as: MusicLike.self) {
-                    let key = "\(like.toUserId)-\(like.trackTitle)-\(like.trackArtist)"
-                    
-                    if var activity = scoreMap[key] {
-                        activity = MusicActivity(
-                            id: activity.id,
-                            userId: activity.userId,
-                            username: activity.username,
-                            displayName: activity.displayName,
-                            profilePhotoURL: activity.profilePhotoURL,
-                            trackId: activity.trackId,
-                            trackTitle: activity.trackTitle,
-                            trackArtist: activity.trackArtist,
-                            provider: activity.provider,
-                            city: activity.city,
-                            country: activity.country,
-                            timestamp: activity.timestamp,
-                            likes: activity.likes + [like.fromUserId],
-                            plays: activity.plays,
-                            location: activity.location
-                        )
-                        scoreMap[key] = activity
-                    }
-                }
+            if leaderboardDoc.exists,
+               let data = leaderboardDoc.data(),
+               let dailyLeaderboard = try? Firestore.Decoder().decode(DailyLeaderboard.self, from: data) {
+                
+                // Use the entries from the daily leaderboard
+                leaderboard = dailyLeaderboard.entries.sorted { $0.rank < $1.rank }
+                
+            } else {
+                // No leaderboard exists for today, create empty leaderboard
+                print("No leaderboard found for \(city) on \(todayString)")
+                leaderboard = []
             }
-            
-            // Process plays
-            for doc in playsSnapshot.documents {
-                if let play = try? doc.data(as: MusicPlay.self) {
-                    let key = "\(play.toUserId)-\(play.trackTitle)-\(play.trackArtist)"
-                    
-                    if var activity = scoreMap[key] {
-                        activity = MusicActivity(
-                            id: activity.id,
-                            userId: activity.userId,
-                            username: activity.username,
-                            displayName: activity.displayName,
-                            profilePhotoURL: activity.profilePhotoURL,
-                            trackId: activity.trackId,
-                            trackTitle: activity.trackTitle,
-                            trackArtist: activity.trackArtist,
-                            provider: activity.provider,
-                            city: activity.city,
-                            country: activity.country,
-                            timestamp: activity.timestamp,
-                            likes: activity.likes,
-                            plays: activity.plays + [play.fromUserId],
-                            location: activity.location
-                        )
-                        scoreMap[key] = activity
-                    }
-                }
-            }
-            
-            // Sort by total score
-            let sortedActivities = Array(scoreMap.values)
-                .sorted { $0.totalScore > $1.totalScore }
-                .prefix(50) // Top 50
-            
-            leaderboard = Array(sortedActivities)
             
         } catch {
             print("Error loading leaderboard: \(error)")
             errorMessage = "Failed to load leaderboard"
+            leaderboard = []
         }
         
         isLoading = false

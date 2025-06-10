@@ -31,7 +31,7 @@ struct User: Codable {
     var isProfileComplete: Bool {
         return !username.isEmpty && 
                !displayName.isEmpty && 
-               (currentAge != nil || age != nil) && 
+               age != nil && 
                photoURL != nil
     }
 }
@@ -45,6 +45,50 @@ enum Gender: String, Codable, CaseIterable {
     
     var displayName: String {
         return self.rawValue
+    }
+}
+
+struct UserStats: Codable {
+    let userId: String
+    var totalScore: Double
+    let lastUpdated: Date
+    let city: String
+    
+    init(userId: String, totalScore: Double = 0.0, lastUpdated: Date = Date(), city: String) {
+        self.userId = userId
+        self.totalScore = totalScore
+        self.lastUpdated = lastUpdated
+        self.city = city
+    }
+}
+
+struct DailyLeaderboard: Codable {
+    let city: String
+    let date: String
+    let entries: [LeaderboardEntry]
+    let lastUpdated: Date
+    
+    init(city: String, date: String, entries: [LeaderboardEntry] = [], lastUpdated: Date = Date()) {
+        self.city = city
+        self.date = date
+        self.entries = entries
+        self.lastUpdated = lastUpdated
+    }
+}
+
+struct LeaderboardEntry: Codable {
+    let userId: String
+    let username: String
+    let displayName: String
+    let totalScore: Double
+    let rank: Int
+    
+    init(userId: String, username: String, displayName: String, totalScore: Double, rank: Int) {
+        self.userId = userId
+        self.username = username
+        self.displayName = displayName
+        self.totalScore = totalScore
+        self.rank = rank
     }
 }
 

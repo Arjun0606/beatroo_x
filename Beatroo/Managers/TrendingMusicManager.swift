@@ -93,9 +93,9 @@ class TrendingMusicManager: ObservableObject {
             // Process likes (1 point each)
             for doc in likesSnapshot.documents {
                 if let like = try? Firestore.Decoder().decode(MusicLike.self, from: doc.data()) {
-                    let key = "\(like.track.title)|\(like.track.artist)"
+                    let key = "\(like.trackTitle)|\(like.trackArtist)"
                     if trackStats[key] == nil {
-                        trackStats[key] = TrackStats(track: like.track, city: city)
+                        trackStats[key] = TrackStats(title: like.trackTitle, artist: like.trackArtist, city: city)
                     }
                     trackStats[key]?.likeCount += 1
                     trackStats[key]?.totalInteractions += 1
@@ -105,9 +105,9 @@ class TrendingMusicManager: ObservableObject {
             // Process plays (2 points each)
             for doc in playsSnapshot.documents {
                 if let play = try? Firestore.Decoder().decode(MusicPlay.self, from: doc.data()) {
-                    let key = "\(play.track.title)|\(play.track.artist)"
+                    let key = "\(play.trackTitle)|\(play.trackArtist)"
                     if trackStats[key] == nil {
-                        trackStats[key] = TrackStats(track: play.track, city: city)
+                        trackStats[key] = TrackStats(title: play.trackTitle, artist: play.trackArtist, city: city)
                     }
                     trackStats[key]?.playCount += 1
                     trackStats[key]?.totalInteractions += 2 // Plays worth 2 points
@@ -121,11 +121,11 @@ class TrendingMusicManager: ObservableObject {
                 .enumerated()
                 .map { index, stats in
                     TrendingTrack(
-                        id: "\(stats.track.title)_\(stats.track.artist)_\(city)".replacingOccurrences(of: " ", with: "_"),
-                        title: stats.track.title,
-                        artist: stats.track.artist,
-                        album: stats.track.album,
-                        artworkURL: stats.track.artworkURL,
+                        id: "\(stats.title)_\(stats.artist)_\(city)".replacingOccurrences(of: " ", with: "_"),
+                        title: stats.title,
+                        artist: stats.artist,
+                        album: "", // Album info not available from likes/plays data
+                        artworkURL: nil, // Artwork URL not available from likes/plays data
                         city: city,
                         totalInteractions: stats.totalInteractions,
                         likeCount: stats.likeCount,
@@ -168,7 +168,8 @@ class TrendingMusicManager: ObservableObject {
 // MARK: - Helper Structures
 
 private struct TrackStats {
-    let track: TrackInfo
+    let title: String
+    let artist: String
     let city: String
     var likeCount: Int = 0
     var playCount: Int = 0

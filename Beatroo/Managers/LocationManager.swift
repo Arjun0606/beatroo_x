@@ -57,9 +57,11 @@ class LocationManager: NSObject, ObservableObject {
         print("LocationManager: Starting location updates...")
         locationManager.startUpdatingLocation()
         
-        // Also try to get location immediately
+        // Also try to get location immediately (on background thread to avoid UI blocking)
         if CLLocationManager.locationServicesEnabled() {
-            locationManager.requestLocation()
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.locationManager.requestLocation()
+            }
         }
     }
     

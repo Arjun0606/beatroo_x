@@ -11,7 +11,7 @@ struct ProfileView: View {
     @State private var showEditProfile = false
     @State private var isConnectingSpotify = false
     @State private var isDeletingAccount = false
-    @State private var showShareableStats = false
+    @State private var showScoringInfo = false
     @State private var userStats: UserStats?
     @State private var userRank: Int = 0
     @State private var totalUsers: Int = 0
@@ -72,93 +72,67 @@ struct ProfileView: View {
                                         )
                                 }
                                 
-                                // Display Name
-                                Text(user.displayName)
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundColor(.white)
-                                
-                                // Username
-                                Text("@\(user.username)")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(beatrooPink)
+                                // Display Name & Username
+                                VStack(spacing: 8) {
+                                    Text(user.displayName)
+                                        .font(.system(size: 28, weight: .bold))
+                                        .foregroundColor(.white)
+                                    
+                                    Text("@\(user.username)")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(beatrooPink)
+                                }
                             }
                             
-                            // Profile Stats & Share Button
-                            VStack(spacing: 20) {
-                                // Share Stats Button
-                                Button(action: {
-                                    loadUserStats()
-                                }) {
-                                    HStack(spacing: 12) {
-                                        ZStack {
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .fill(beatrooPink.opacity(0.2))
-                                                .frame(width: 40, height: 40)
-                                            
-                                            Image(systemName: "square.and.arrow.up.circle.fill")
-                                                .font(.system(size: 20))
-                                                .foregroundColor(beatrooPink)
-                                        }
-                                        
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Share Your Stats")
-                                                .font(.system(size: 18, weight: .bold))
-                                                .foregroundColor(.white)
-                                            
-                                            if userRank > 0 && userStats != nil {
-                                                Text("Rank #\(userRank) • \(String(format: "%.1f", userStats!.totalScore)) points")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(beatrooPink)
-                                            } else {
-                                                Text("Show off your music discovery achievements")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(.gray)
-                                            }
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.gray)
+                            // Scoring System Section
+                            VStack(alignment: .leading, spacing: 15) {
+                                HStack {
+                                    Text("💎 Scoring System")
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    
+                                    Spacer()
+                                    
+                                    Button(action: { showScoringInfo = true }) {
+                                        Image(systemName: "info.circle")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(beatrooPink)
                                     }
-                                    .padding()
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(15)
+                                }
+                                .padding(.horizontal, 20)
+                            }
+                            
+                            // Profile Info Cards
+                            VStack(spacing: 15) {
+                                ProfileInfoCard(
+                                    icon: "envelope.fill",
+                                    title: "Email",
+                                    value: user.email,
+                                    iconColor: beatrooPink
+                                )
+                                
+                                if let age = user.currentAge {
+                                    ProfileInfoCard(
+                                        icon: "calendar",
+                                        title: "Age",
+                                        value: "\(age) years old",
+                                        iconColor: beatrooPink
+                                    )
                                 }
                                 
-                                // Profile Info Cards
-                                VStack(spacing: 15) {
-                                    ProfileInfoCard(
-                                        icon: "envelope.fill",
-                                        title: "Email",
-                                        value: user.email,
-                                        iconColor: beatrooPink
-                                    )
-                                    
-                                    if let age = user.currentAge {
-                                        ProfileInfoCard(
-                                            icon: "calendar",
-                                            title: "Age",
-                                            value: "\(age) years old",
-                                            iconColor: beatrooPink
-                                        )
-                                    }
-                                    
-                                    ProfileInfoCard(
-                                        icon: "person.fill",
-                                        title: "Gender",
-                                        value: user.gender == .custom ? (user.customGender ?? user.gender.displayName) : user.gender.displayName,
-                                        iconColor: beatrooPink
-                                    )
-                                    
-                                    ProfileInfoCard(
-                                        icon: "clock.fill",
-                                        title: "Member Since",
-                                        value: formatDate(user.createdAt),
-                                        iconColor: beatrooPink
-                                    )
-                                }
+                                ProfileInfoCard(
+                                    icon: "person.fill",
+                                    title: "Gender",
+                                    value: user.gender == .custom ? (user.customGender ?? user.gender.displayName) : user.gender.displayName,
+                                    iconColor: beatrooPink
+                                )
+                                
+                                ProfileInfoCard(
+                                    icon: "clock.fill",
+                                    title: "Member Since",
+                                    value: formatDate(user.createdAt),
+                                    iconColor: beatrooPink
+                                )
                             }
                             .padding(.horizontal, 20)
                             .padding(.top, 20)
@@ -269,30 +243,8 @@ struct ProfileView: View {
         } message: {
             Text("This action cannot be undone. All your data will be permanently deleted.")
         }
-        .fullScreenCover(isPresented: $showShareableStats) {
-            if let stats = userStats, let city = locationManager.currentCity {
-                ShareableStatsView(
-                    userStats: stats,
-                    rank: userRank,
-                    totalUsers: totalUsers,
-                    city: city,
-                    isPresented: $showShareableStats
-                )
-            } else {
-                // Fallback with placeholder data
-                ShareableStatsView(
-                    userStats: UserStats(
-                        userId: "placeholder",
-                        totalScore: 0,
-                        lastUpdated: Date(),
-                        city: locationManager.currentCity ?? "Unknown"
-                    ),
-                    rank: 1,
-                    totalUsers: 1,
-                    city: locationManager.currentCity ?? "Unknown",
-                    isPresented: $showShareableStats
-                )
-            }
+        .sheet(isPresented: $showScoringInfo) {
+            ScoringInfoSheet(isPresented: $showScoringInfo)
         }
     }
     
@@ -379,10 +331,7 @@ struct ProfileView: View {
                 .padding(.horizontal, 20)
             
             VStack(spacing: 15) {
-                // Spotify Connection
                 spotifyServiceRow
-                
-                // Apple Music (always available)
                 appleMusicServiceRow
             }
             .padding(.horizontal, 20)
@@ -402,10 +351,9 @@ struct ProfileView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white)
                 
-                // Show detailed status using the enhanced status system
-                Text(musicCoordinator.spotifyManager.connectionStatus)
+                Text(musicCoordinator.spotifyManager.isConnected ? "Connected" : "Not connected")
                     .font(.system(size: 14))
-                    .foregroundColor(statusColor(for: musicCoordinator.spotifyManager.connectionStatus))
+                    .foregroundColor(musicCoordinator.spotifyManager.isConnected ? .green : .gray)
             }
             
             Spacer()
@@ -416,7 +364,7 @@ struct ProfileView: View {
         .background(Color.gray.opacity(0.1))
         .cornerRadius(12)
     }
-    
+                                    
     private var appleMusicServiceRow: some View {
         HStack(spacing: 15) {
             Image(systemName: "music.note")
@@ -495,11 +443,20 @@ struct ProfileView: View {
     private func loadUserStats() {
         guard let userId = authManager.currentUser?.uid,
               let city = locationManager.currentCity else {
-            showShareableStats = true // Show with placeholder data
+            // Create placeholder data with real zeros
+            let placeholderStats = UserStats(
+                userId: authManager.currentUser?.uid ?? "placeholder",
+                totalScore: 0.0,
+                lastUpdated: Date(),
+                city: locationManager.currentCity ?? "Unknown"
+            )
+            userStats = placeholderStats
+            userRank = 1
+            totalUsers = 1
             return
         }
         
-        Task {
+        Task { @MainActor in
             do {
                 // Load user stats
                 let statsDoc = try await Firestore.firestore()
@@ -530,38 +487,195 @@ struct ProfileView: View {
                         total = leaderboard.entries.count
                     }
                     
-                    await MainActor.run {
-                        self.userStats = stats
-                        self.userRank = rank
-                        self.totalUsers = total
-                        self.showShareableStats = true
-                    }
+                    self.userStats = stats
+                    self.userRank = rank
+                    self.totalUsers = total
+                } else {
+                    // No stats found, create with zeros
+                    let newStats = UserStats(
+                        userId: userId,
+                        totalScore: 0.0,
+                        lastUpdated: Date(),
+                        city: city
+                    )
+                    self.userStats = newStats
+                    self.userRank = 1
+                    self.totalUsers = 1
                 }
                 
             } catch {
                 print("Error loading user stats: \(error)")
-                await MainActor.run {
-                    // Show with placeholder data on error
-                    self.showShareableStats = true
-                }
+                // Show with real zero data on error
+                let errorStats = UserStats(
+                    userId: userId,
+                    totalScore: 0.0,
+                    lastUpdated: Date(),
+                    city: city
+                )
+                self.userStats = errorStats
+                self.userRank = 1
+                self.totalUsers = 1
             }
         }
     }
 }
 
-// MARK: - Shareable Stats Modal
+// MARK: - Scoring Info Sheet
 
-extension ProfileView {
-    private var shareableStatsModal: some View {
-        ZStack {
-            if let stats = userStats, let city = locationManager.currentCity {
-                ShareableStatsView(
-                    userStats: stats,
-                    rank: userRank,
-                    totalUsers: totalUsers,
-                    city: city,
-                    isPresented: $showShareableStats
-                )
+struct ScoringInfoSheet: View {
+    @Binding var isPresented: Bool
+    private let beatrooPink = Color(hex: "B01E68")
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 8) {
+                            Text("💎")
+                                .font(.system(size: 60))
+                            
+                            Text("Scoring System")
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundColor(.white)
+                            
+                            Text("How points are earned in Beatroo")
+                                .font(.system(size: 16))
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.top, 20)
+                        
+                        // Getting points (receiving)
+                        VStack(spacing: 16) {
+                            Text("When Others Interact With Your Vibes:")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            VStack(spacing: 12) {
+                                HStack(spacing: 16) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "heart.fill")
+                                            .foregroundColor(.red)
+                                            .font(.system(size: 20))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("1 pt")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.white)
+                                            Text("per like")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "play.fill")
+                                            .foregroundColor(.green)
+                                            .font(.system(size: 20))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("2 pts")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.white)
+                                            Text("per play")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        
+                        // Giving points (engaging)
+                        VStack(spacing: 16) {
+                            Text("When You Discover Others' Music:")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            VStack(spacing: 12) {
+                                HStack(spacing: 16) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "heart.fill")
+                                            .foregroundColor(.pink)
+                                            .font(.system(size: 18))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("+0.25")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundColor(.pink)
+                                            Text("for liking")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "play.fill")
+                                            .foregroundColor(.cyan)
+                                            .font(.system(size: 18))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("+0.5")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundColor(.cyan)
+                                            Text("for playing")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        
+                        // Daily reset info
+                        HStack(spacing: 12) {
+                            Image(systemName: "clock.fill")
+                                .foregroundColor(beatrooPink)
+                                .font(.system(size: 20))
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Daily Reset")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                
+                                Text("Leaderboard resets every day at midnight")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        isPresented = false
+                    }
+                    .foregroundColor(beatrooPink)
+                }
             }
         }
     }
@@ -596,13 +710,4 @@ struct ProfileInfoCard: View {
         .background(Color.gray.opacity(0.1))
         .cornerRadius(12)
     }
-}
-
-// MARK: - Date Formatter Extension for Leaderboard
-extension DateFormatter {
-    static let leaderboardFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 } 

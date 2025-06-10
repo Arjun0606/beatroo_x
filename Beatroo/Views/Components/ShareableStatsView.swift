@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct ShareableStatsView: View {
     let userStats: UserStats
@@ -6,6 +7,9 @@ struct ShareableStatsView: View {
     let totalUsers: Int
     let city: String
     @Binding var isPresented: Bool
+    
+    @State private var likesGiven: Int = 0
+    @State private var playsGiven: Int = 0
     
     private let beatrooPink = Color(hex: "B01E68")
     private let cardWidth: CGFloat = 320
@@ -60,6 +64,9 @@ struct ShareableStatsView: View {
                     }
                 }
             }
+        }
+        .onAppear {
+            loadUserInteractionStats()
         }
     }
     
@@ -154,14 +161,14 @@ struct ShareableStatsView: View {
                     
                     StatItem(
                         icon: "heart.fill",
-                        value: "\(userStats.likesGiven)",
+                        value: "\(likesGiven)",
                         label: "LIKES",
                         color: .red
                     )
                     
                     StatItem(
                         icon: "play.fill",
-                        value: "\(userStats.playsGiven)",
+                        value: "\(playsGiven)",
                         label: "PLAYS",
                         color: .green
                     )
@@ -183,22 +190,53 @@ struct ShareableStatsView: View {
     }
     
     private var rankDescription: String {
-        let percentage = (Double(totalUsers - rank + 1) / Double(totalUsers)) * 100
-        
         switch rank {
-        case 1:
-            return "👑 MUSIC KING/QUEEN"
-        case 2...5:
-            return "🔥 TOP DISCOVERER"
-        case 6...10:
-            return "⚡ VIBE CURATOR"
-        default:
-            if percentage >= 80 {
-                return "🎵 RISING STAR"
-            } else if percentage >= 60 {
-                return "🎧 MUSIC LOVER"
-            } else {
-                return "🎶 VIBE EXPLORER"
+        case 1: return "🥇"
+        case 2: return "🥈"
+        case 3: return "🥉"
+        case 4: return "👑"
+        case 5: return "🔥"
+        case 6: return "⚡"
+        case 7: return "💎"
+        case 8: return "⭐"
+        case 9: return "🎵"
+        case 10: return "🎶"
+        default: return "🎧"
+        }
+    }
+    
+    private func loadUserInteractionStats() {
+        guard !userStats.userId.isEmpty else {
+            likesGiven = 0
+            playsGiven = 0
+            return
+        }
+        
+        Task {
+            do {
+                // Load likes given by this user
+                let likesSnapshot = try await Firestore.firestore()
+                    .collection("music_likes")
+                    .whereField("fromUserId", isEqualTo: userStats.userId)
+                    .getDocuments()
+                
+                // Load plays by this user
+                let playsSnapshot = try await Firestore.firestore()
+                    .collection("music_plays")
+                    .whereField("fromUserId", isEqualTo: userStats.userId)
+                    .getDocuments()
+                
+                await MainActor.run {
+                    self.likesGiven = likesSnapshot.documents.count
+                    self.playsGiven = playsSnapshot.documents.count
+                }
+                
+            } catch {
+                print("Error loading interaction stats: \(error)")
+                await MainActor.run {
+                    self.likesGiven = 0
+                    self.playsGiven = 0
+                }
             }
         }
     }
@@ -206,25 +244,61 @@ struct ShareableStatsView: View {
     private func shareToStory() {
         let image = generateStatsImage()
         
+        // Create more specific sharing options
+        let shareText = "Check out my Beatroo music discovery stats! 🎵 Rank #\(rank) in \(city) with \(String(format: "%.1f", userStats.totalScore)) points!"
+        
         let activityVC = UIActivityViewController(
-            activityItems: [image],
+            activityItems: [shareText, image],
             applicationActivities: nil
         )
         
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            window.rootViewController?.present(activityVC, animated: true)
+        // Customize for better social media sharing
+        activityVC.completionWithItemsHandler = { activityType, completed, returnedItems, error in
+            if completed {
+                print("Successfully shared to: \(activityType?.rawValue ?? "unknown")")
+            }
+        }
+        
+        // Configure for iPad
+        if let popover = activityVC.popoverPresentationController {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                popover.sourceView = window
+                popover.sourceRect = CGRect(x: UIScreen.main.bounds.midX, y: UIScreen.main.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+        }
+        
+        // Present the share sheet using the modern approach
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            // Get the key window for this scene
+            let keyWindow = windowScene.windows.first { $0.isKeyWindow }
+            
+            if let window = keyWindow ?? windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+                
+                // Find the topmost view controller
+                var topViewController = rootViewController
+                while let presented = topViewController.presentedViewController {
+                    topViewController = presented
+                }
+                
+                topViewController.present(activityVC, animated: true)
+            }
         }
     }
     
     private func saveToPhotos() {
         let image = generateStatsImage()
         UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        
+        // Show feedback (you could add a toast notification here)
+        print("Stats image saved to Photos")
     }
     
     private func generateStatsImage() -> UIImage {
         let renderer = ImageRenderer(content: statsCard.frame(width: cardWidth, height: cardHeight))
-        renderer.scale = 3.0 // High resolution
+        renderer.scale = 3.0 // High resolution for crisp sharing
         return renderer.uiImage ?? UIImage()
     }
 }
@@ -257,19 +331,6 @@ struct StatItem: View {
                     .foregroundColor(.gray)
             }
         }
-    }
-}
-
-// MARK: - User Stats Extension
-extension UserStats {
-    var likesGiven: Int {
-        // This would be tracked in Firebase, for now return a placeholder
-        return Int.random(in: 5...50)
-    }
-    
-    var playsGiven: Int {
-        // This would be tracked in Firebase, for now return a placeholder  
-        return Int.random(in: 2...25)
     }
 }
 

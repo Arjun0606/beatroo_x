@@ -1,9 +1,15 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct LeaderboardView: View {
     @EnvironmentObject var socialMusicManager: SocialMusicManager
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var authManager: AuthenticationManager
     @State private var showRefreshAlert = false
+    @State private var showShareableStats = false
+    @State private var userStats: UserStats?
+    @State private var userRank: Int = 1
+    @State private var totalUsers: Int = 1
     
     private let beatrooPink = Color(hex: "B01E68")
     
@@ -36,12 +42,30 @@ struct LeaderboardView: View {
                     
                     // City Lock Banner
                     CityLockBanner()
+                    
+                    // Share Stats Button
+                    if authManager.currentUser != nil {
+                        Button(action: loadUserStats) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 16))
+                                Text("Share Your Daily Stats")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.gray)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.vertical, 14)
+                            .padding(.horizontal, 16)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
-                
-                // Info Banner
-                InfoBannerView()
                 
                 // Leaderboard Content
                 if socialMusicManager.isLoading {
@@ -51,10 +75,10 @@ struct LeaderboardView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
-                            ForEach(Array(socialMusicManager.leaderboard.enumerated()), id: \.element.id) { index, activity in
+                            ForEach(Array(socialMusicManager.leaderboard.enumerated()), id: \.offset) { index, entry in
                                 LeaderboardRow(
                                     position: index + 1,
-                                    activity: activity
+                                    entry: entry
                                 )
                             }
                         }
@@ -66,6 +90,9 @@ struct LeaderboardView: View {
                 Spacer()
             }
         }
+        .fullScreenCover(isPresented: $showShareableStats) {
+            shareableStatsModal
+        }
         .onAppear {
             Task {
                 await socialMusicManager.loadLeaderboard()
@@ -75,6 +102,105 @@ struct LeaderboardView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text("Leaderboard resets every day at midnight. Keep sharing great music to climb the ranks!")
+        }
+    }
+    
+    // MARK: - Shareable Stats Functions
+    
+    private func loadUserStats() {
+        guard let userId = authManager.currentUser?.uid,
+              let city = locationManager.currentCity else {
+            // Create placeholder data with real zeros
+            let placeholderStats = UserStats(
+                userId: authManager.currentUser?.uid ?? "placeholder",
+                totalScore: 0.0,
+                lastUpdated: Date(),
+                city: locationManager.currentCity ?? "Unknown"
+            )
+            userStats = placeholderStats
+            userRank = 1
+            totalUsers = 1
+            showShareableStats = true
+            return
+        }
+        
+        Task { @MainActor in
+            do {
+                // Load user stats
+                let statsDoc = try await Firestore.firestore()
+                    .collection("user_stats")
+                    .document(userId)
+                    .getDocument()
+                
+                if let data = statsDoc.data(),
+                   let stats = try? Firestore.Decoder().decode(UserStats.self, from: data) {
+                    
+                    // Load leaderboard to get rank
+                    let leaderboardSnapshot = try await Firestore.firestore()
+                        .collection("leaderboards")
+                        .document(city)
+                        .collection("daily")
+                        .document(DateFormatter.leaderboardFormatter.string(from: Date()))
+                        .getDocument()
+                    
+                    var rank = 1
+                    var total = 1
+                    
+                    if let leaderboardData = leaderboardSnapshot.data(),
+                       let leaderboard = try? Firestore.Decoder().decode(DailyLeaderboard.self, from: leaderboardData) {
+                        
+                        if let userEntry = leaderboard.entries.first(where: { $0.userId == userId }) {
+                            rank = userEntry.rank
+                        }
+                        total = leaderboard.entries.count
+                    }
+                    
+                    self.userStats = stats
+                    self.userRank = rank
+                    self.totalUsers = total
+                    self.showShareableStats = true
+                } else {
+                    // No stats found, create with zeros
+                    let newStats = UserStats(
+                        userId: userId,
+                        totalScore: 0.0,
+                        lastUpdated: Date(),
+                        city: city
+                    )
+                    self.userStats = newStats
+                    self.userRank = 1
+                    self.totalUsers = 1
+                    self.showShareableStats = true
+                }
+                
+            } catch {
+                print("Error loading user stats: \(error)")
+                // Show with real zero data on error
+                let errorStats = UserStats(
+                    userId: userId,
+                    totalScore: 0.0,
+                    lastUpdated: Date(),
+                    city: city
+                )
+                self.userStats = errorStats
+                self.userRank = 1
+                self.totalUsers = 1
+                self.showShareableStats = true
+            }
+        }
+    }
+    
+    private var shareableStatsModal: some View {
+        ZStack {
+            if let stats = userStats, let city = locationManager.currentCity {
+                ShareableStatsView(
+                    userStats: stats,
+                    rank: userRank,
+                    totalUsers: totalUsers,
+                    city: city,
+                    isPresented: $showShareableStats
+                )
+            }
         }
     }
 }
@@ -132,7 +258,7 @@ struct CityLockBanner: View {
             Spacer()
             
             // City Stats Badge
-            if let city = locationManager.currentCity {
+            if let _city = locationManager.currentCity {
                 VStack(spacing: 2) {
                     Text("TODAY")
                         .font(.system(size: 10, weight: .bold))
@@ -168,12 +294,12 @@ struct CityLockBanner: View {
                 refreshTrigger.toggle()
             }
         }
-        .onChange(of: locationManager.currentCity) { newCity in
+        .onChange(of: locationManager.currentCity) { oldCity, newCity in
             // **REACTIVE UPDATE**: Force view refresh when location changes
             print("CityLockBanner: City updated to: \(newCity ?? "nil")")
             refreshTrigger.toggle()
         }
-        .onChange(of: refreshTrigger) { _ in
+        .onChange(of: refreshTrigger) { oldValue, newValue in
             // This forces the view to re-render
         }
     }
@@ -182,107 +308,6 @@ struct CityLockBanner: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM dd"
         return formatter.string(from: Date())
-    }
-}
-
-struct InfoBannerView: View {
-    private let beatrooPink = Color(hex: "B01E68")
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            // Title
-            Text("💎 Scoring System")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.white)
-            
-            // Getting points (receiving)
-            VStack(spacing: 6) {
-                Text("When Others Interact With Your Vibes:")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.gray)
-                
-                HStack(spacing: 20) {
-                    VStack(spacing: 4) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "heart.fill")
-                                .foregroundColor(.red)
-                                .font(.system(size: 12))
-                            Text("1 pt")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                        Text("per like")
-                            .font(.system(size: 10))
-                            .foregroundColor(.gray)
-                    }
-                    
-                    VStack(spacing: 4) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "play.fill")
-                                .foregroundColor(.green)
-                                .font(.system(size: 12))
-                            Text("2 pts")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                        Text("per play")
-                            .font(.system(size: 10))
-                            .foregroundColor(.gray)
-                    }
-                }
-            }
-            
-            // Giving points (engaging)
-            VStack(spacing: 6) {
-                Text("When You Discover Others' Music:")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.gray)
-                
-                HStack(spacing: 20) {
-                    VStack(spacing: 4) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "heart.fill")
-                                .foregroundColor(.pink)
-                                .font(.system(size: 10))
-                            Text("+0.25")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.pink)
-                        }
-                        Text("for liking")
-                            .font(.system(size: 9))
-                            .foregroundColor(.gray)
-                    }
-                    
-                    VStack(spacing: 4) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "play.fill")
-                                .foregroundColor(.cyan)
-                                .font(.system(size: 10))
-                            Text("+0.5")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.cyan)
-                        }
-                        Text("for playing")
-                            .font(.system(size: 9))
-                            .foregroundColor(.gray)
-                    }
-                }
-            }
-            
-            // Daily reset
-            HStack(spacing: 8) {
-                Text("🕛")
-                    .font(.system(size: 14))
-                Text("Resets daily")
-                    .font(.system(size: 11))
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding()
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(12)
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
     }
 }
 
@@ -336,7 +361,7 @@ struct EmptyLeaderboardView: View {
 
 struct LeaderboardRow: View {
     let position: Int
-    let activity: MusicActivity
+    let entry: LeaderboardEntry
     
     private let beatrooPink = Color(hex: "B01E68")
     
@@ -376,75 +401,39 @@ struct LeaderboardRow: View {
             
             // User Info
             VStack(alignment: .leading, spacing: 4) {
-                Text("@\(activity.username)")
+                Text("@\(entry.username)")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
                 
-                Text("\(activity.trackTitle)")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(beatrooPink)
-                    .lineLimit(1)
-                
-                Text("by \(activity.trackArtist)")
-                    .font(.system(size: 12))
+                Text("\(String(format: "%.1f", entry.totalScore)) points")
+                    .font(.system(size: 14))
                     .foregroundColor(.gray)
-                    .lineLimit(1)
             }
             
             Spacer()
             
-            // Stats
-            VStack(alignment: .trailing, spacing: 8) {
-                // Total Score
-                VStack(spacing: 2) {
-                    Text("\(activity.totalScore)")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(rankColor)
-                    Text("points")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
-                }
+            // Score Display (simplified since we don't have individual like/play counts in LeaderboardEntry)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(String(format: "%.1f", entry.totalScore))")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(beatrooPink)
                 
-                // Breakdown
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.red)
-                            .font(.system(size: 10))
-                        Text("\(activity.likeCount)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "play.fill")
-                            .foregroundColor(.green)
-                            .font(.system(size: 10))
-                        Text("\(activity.playCount)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                }
+                Text("points")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
             }
         }
         .padding()
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.gray.opacity(position <= 3 ? 0.2 : 0.1),
-                    Color.gray.opacity(position <= 3 ? 0.1 : 0.05)
-                ]),
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    position <= 3 ? rankColor.opacity(0.3) : Color.clear,
-                    lineWidth: position <= 3 ? 1 : 0
-                )
-        )
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
     }
+}
+
+// MARK: - Date Formatter Extension for Leaderboard
+extension DateFormatter {
+    static let leaderboardFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 } 

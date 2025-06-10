@@ -59,7 +59,7 @@ struct TrendingMusicView: View {
         .onAppear {
             trendingManager.loadTrendingMusic(for: city)
         }
-        .onChange(of: city) { newCity in
+        .onChange(of: city) { oldCity, newCity in
             trendingManager.loadTrendingMusic(for: newCity)
         }
     }
