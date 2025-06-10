@@ -1,13 +1,20 @@
 import SwiftUI
+import Firebase
+import FirebaseFirestore
 
 struct ProfileView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var musicCoordinator: MusicServiceCoordinator
+    @EnvironmentObject var locationManager: LocationManager
     @State private var showSignOutAlert = false
     @State private var showDeleteAlert = false
     @State private var showEditProfile = false
     @State private var isConnectingSpotify = false
     @State private var isDeletingAccount = false
+    @State private var showShareableStats = false
+    @State private var userStats: UserStats?
+    @State private var userRank: Int = 0
+    @State private var totalUsers: Int = 0
     
     private let beatrooPink = Color(hex: "B01E68") // Consistent Beatroo pink color
     
@@ -76,37 +83,82 @@ struct ProfileView: View {
                                     .foregroundColor(beatrooPink)
                             }
                             
-                            // Profile Info Cards
-                            VStack(spacing: 15) {
-                                ProfileInfoCard(
-                                    icon: "envelope.fill",
-                                    title: "Email",
-                                    value: user.email,
-                                    iconColor: beatrooPink
-                                )
+                            // Profile Stats & Share Button
+                            VStack(spacing: 20) {
+                                // Share Stats Button
+                                Button(action: {
+                                    loadUserStats()
+                                }) {
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(beatrooPink.opacity(0.2))
+                                                .frame(width: 40, height: 40)
+                                            
+                                            Image(systemName: "square.and.arrow.up.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(beatrooPink)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Share Your Stats")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.white)
+                                            
+                                            if userRank > 0 && userStats != nil {
+                                                Text("Rank #\(userRank) • \(String(format: "%.1f", userStats!.totalScore)) points")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(beatrooPink)
+                                            } else {
+                                                Text("Show off your music discovery achievements")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.gray)
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(15)
+                                }
                                 
-                                if let age = user.currentAge {
+                                // Profile Info Cards
+                                VStack(spacing: 15) {
                                     ProfileInfoCard(
-                                        icon: "calendar",
-                                        title: "Age",
-                                        value: "\(age) years old",
+                                        icon: "envelope.fill",
+                                        title: "Email",
+                                        value: user.email,
+                                        iconColor: beatrooPink
+                                    )
+                                    
+                                    if let age = user.currentAge {
+                                        ProfileInfoCard(
+                                            icon: "calendar",
+                                            title: "Age",
+                                            value: "\(age) years old",
+                                            iconColor: beatrooPink
+                                        )
+                                    }
+                                    
+                                    ProfileInfoCard(
+                                        icon: "person.fill",
+                                        title: "Gender",
+                                        value: user.gender == .custom ? (user.customGender ?? user.gender.displayName) : user.gender.displayName,
+                                        iconColor: beatrooPink
+                                    )
+                                    
+                                    ProfileInfoCard(
+                                        icon: "clock.fill",
+                                        title: "Member Since",
+                                        value: formatDate(user.createdAt),
                                         iconColor: beatrooPink
                                     )
                                 }
-                                
-                                ProfileInfoCard(
-                                    icon: "person.fill",
-                                    title: "Gender",
-                                    value: user.gender == .custom ? (user.customGender ?? user.gender.displayName) : user.gender.displayName,
-                                    iconColor: beatrooPink
-                                )
-                                
-                                ProfileInfoCard(
-                                    icon: "clock.fill",
-                                    title: "Member Since",
-                                    value: formatDate(user.createdAt),
-                                    iconColor: beatrooPink
-                                )
                             }
                             .padding(.horizontal, 20)
                             .padding(.top, 20)
@@ -216,6 +268,31 @@ struct ProfileView: View {
             }
         } message: {
             Text("This action cannot be undone. All your data will be permanently deleted.")
+        }
+        .fullScreenCover(isPresented: $showShareableStats) {
+            if let stats = userStats, let city = locationManager.currentCity {
+                ShareableStatsView(
+                    userStats: stats,
+                    rank: userRank,
+                    totalUsers: totalUsers,
+                    city: city,
+                    isPresented: $showShareableStats
+                )
+            } else {
+                // Fallback with placeholder data
+                ShareableStatsView(
+                    userStats: UserStats(
+                        userId: "placeholder",
+                        totalScore: 0,
+                        lastUpdated: Date(),
+                        city: locationManager.currentCity ?? "Unknown"
+                    ),
+                    rank: 1,
+                    totalUsers: 1,
+                    city: locationManager.currentCity ?? "Unknown",
+                    isPresented: $showShareableStats
+                )
+            }
         }
     }
     
@@ -412,6 +489,82 @@ struct ProfileView: View {
             .disabled(isConnectingSpotify)
         }
     }
+    
+    // MARK: - Shareable Stats Functions
+    
+    private func loadUserStats() {
+        guard let userId = authManager.currentUser?.uid,
+              let city = locationManager.currentCity else {
+            showShareableStats = true // Show with placeholder data
+            return
+        }
+        
+        Task {
+            do {
+                // Load user stats
+                let statsDoc = try await Firestore.firestore()
+                    .collection("user_stats")
+                    .document(userId)
+                    .getDocument()
+                
+                if let data = statsDoc.data(),
+                   let stats = try? Firestore.Decoder().decode(UserStats.self, from: data) {
+                    
+                    // Load leaderboard to get rank
+                    let leaderboardSnapshot = try await Firestore.firestore()
+                        .collection("leaderboards")
+                        .document(city)
+                        .collection("daily")
+                        .document(DateFormatter.leaderboardFormatter.string(from: Date()))
+                        .getDocument()
+                    
+                    var rank = 1
+                    var total = 1
+                    
+                    if let leaderboardData = leaderboardSnapshot.data(),
+                       let leaderboard = try? Firestore.Decoder().decode(DailyLeaderboard.self, from: leaderboardData) {
+                        
+                        if let userEntry = leaderboard.entries.first(where: { $0.userId == userId }) {
+                            rank = userEntry.rank
+                        }
+                        total = leaderboard.entries.count
+                    }
+                    
+                    await MainActor.run {
+                        self.userStats = stats
+                        self.userRank = rank
+                        self.totalUsers = total
+                        self.showShareableStats = true
+                    }
+                }
+                
+            } catch {
+                print("Error loading user stats: \(error)")
+                await MainActor.run {
+                    // Show with placeholder data on error
+                    self.showShareableStats = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Shareable Stats Modal
+
+extension ProfileView {
+    private var shareableStatsModal: some View {
+        ZStack {
+            if let stats = userStats, let city = locationManager.currentCity {
+                ShareableStatsView(
+                    userStats: stats,
+                    rank: userRank,
+                    totalUsers: totalUsers,
+                    city: city,
+                    isPresented: $showShareableStats
+                )
+            }
+        }
+    }
 }
 
 struct ProfileInfoCard: View {
@@ -443,4 +596,13 @@ struct ProfileInfoCard: View {
         .background(Color.gray.opacity(0.1))
         .cornerRadius(12)
     }
+}
+
+// MARK: - Date Formatter Extension for Leaderboard
+extension DateFormatter {
+    static let leaderboardFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 } 

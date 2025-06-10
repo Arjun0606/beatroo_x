@@ -5,8 +5,10 @@ struct NowPlayingView: View {
     @EnvironmentObject var musicCoordinator: MusicServiceCoordinator
     @EnvironmentObject var socialMusicManager: SocialMusicManager
     @EnvironmentObject var locationManager: LocationManager
+    @StateObject private var trendingManager = TrendingMusicManager()
     @State private var isExpanded = false
     @State private var showLocationAlert = false
+    @State private var selectedTab: Int = 0 // 0 = Nearby, 1 = Trending
     
     private let beatrooPink = Color(hex: "B01E68") // Consistent Beatroo pink color
     private let artworkSize: CGFloat = 100
@@ -111,61 +113,107 @@ struct NowPlayingView: View {
                 }
             }
             
-            // Nearby Vibes Content
+            // Main Content with Tabs
             if !isExpanded {
                 VStack(spacing: 0) {
-                    // Header
-                    HStack {
-                        Text("Nearby Vibes")
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        Spacer()
-                        
-                        if locationManager.authorizationStatus == .authorizedWhenInUse ||
-                           locationManager.authorizationStatus == .authorizedAlways {
-                            Text("\(socialMusicManager.nearbyUsers.count)")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(beatrooPink)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(beatrooPink.opacity(0.2))
-                                .cornerRadius(12)
+                    // Header with Tab Picker
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text("Discover")
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundColor(.white)
+                            
+                            Spacer()
+                            
+                            if selectedTab == 0 && (locationManager.authorizationStatus == .authorizedWhenInUse ||
+                               locationManager.authorizationStatus == .authorizedAlways) {
+                                Text("\(socialMusicManager.nearbyUsers.count)")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(beatrooPink)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(beatrooPink.opacity(0.2))
+                                    .cornerRadius(12)
+                            }
                         }
+                        
+                        // Tab Picker
+                        HStack(spacing: 0) {
+                            TabButton(title: "Nearby", isSelected: selectedTab == 0) {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    selectedTab = 0
+                                }
+                            }
+                            
+                            TabButton(title: "Trending", isSelected: selectedTab == 1) {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    selectedTab = 1
+                                }
+                            }
+                        }
+                        .background(Color.gray.opacity(0.2))
+                        .cornerRadius(12)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
                     
-                    // Location Status
-                    if locationManager.authorizationStatus != .authorizedWhenInUse &&
-                       locationManager.authorizationStatus != .authorizedAlways {
-                        NearbyLocationPermissionView()
-                    } else if let city = locationManager.currentCity {
-                        HStack {
-                            Image(systemName: "location.fill")
-                                .foregroundColor(beatrooPink)
-                            Text("Discovering in \(city)")
-                                .font(.system(size: 14))
-                                .foregroundColor(.gray)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                    }
-                    
-                    // Nearby Users List
-                    if socialMusicManager.nearbyUsers.isEmpty {
-                        NearbyEmptyStateView()
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 16) {
-                                ForEach(socialMusicManager.nearbyUsers) { user in
-                                    NearbyUserCardView(user: user)
-                                        .environmentObject(socialMusicManager)
+                    // Content based on selected tab
+                    if selectedTab == 0 {
+                        // Nearby Content
+                        VStack(spacing: 0) {
+                            // Location Status
+                            if locationManager.authorizationStatus != .authorizedWhenInUse &&
+                               locationManager.authorizationStatus != .authorizedAlways {
+                                NearbyLocationPermissionView()
+                            } else if let city = locationManager.currentCity {
+                                HStack {
+                                    Image(systemName: "location.fill")
+                                        .foregroundColor(beatrooPink)
+                                    Text("Discovering in \(city)")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.gray)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
+                            }
+                            
+                            // Nearby Users List
+                            if socialMusicManager.nearbyUsers.isEmpty {
+                                NearbyEmptyStateView()
+                            } else {
+                                ScrollView {
+                                    LazyVStack(spacing: 16) {
+                                        ForEach(socialMusicManager.nearbyUsers) { user in
+                                            NearbyUserCardView(user: user)
+                                                .environmentObject(socialMusicManager)
+                                        }
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.top, 20)
                                 }
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 20)
+                        }
+                    } else {
+                        // Trending Content
+                        ScrollView {
+                            if let city = locationManager.currentCity {
+                                TrendingMusicView(trendingManager: trendingManager, city: city)
+                                    .padding(.top, 20)
+                            } else {
+                                VStack(spacing: 16) {
+                                    Image(systemName: "location.slash")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.gray)
+                                    
+                                    Text("Location needed for trending music")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.gray)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 60)
+                            }
                         }
                     }
                     
@@ -191,6 +239,30 @@ struct NowPlayingView: View {
         } message: {
             Text("Please enable location access to discover nearby music.")
         }
+    }
+}
+
+// MARK: - Tab Button Component
+struct TabButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    private let beatrooPink = Color(hex: "B01E68")
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(isSelected ? .white : .gray)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    isSelected ? beatrooPink : Color.clear
+                )
+                .cornerRadius(8)
+        }
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
     
     private func setupLocationAndDiscovery() {
